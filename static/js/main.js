@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let unsavedChanges = false;
     let suppressEditorChanges = false;
     let editor = null;
+    let chapterWordCounts = new Map();
+    let currentPersistedWordCount = 0;
     const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
     
     // Metadata State
@@ -30,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const bookTitleDisplay = document.getElementById('book-title-display');
     const chapterTitleInput = document.getElementById('chapter-title-input');
     const saveStatusEl = document.getElementById('save-status');
+    const chapterWordCountEl = document.getElementById('chapter-word-count');
     const addChapterBtn = document.getElementById('add-chapter-btn');
     const addPartBtn = document.getElementById('add-part-btn');
     const manualSaveBtn = document.getElementById('manual-save-btn');
@@ -54,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportPdfBtn = document.getElementById('export-pdf-btn');
     const exportDocxBtn = document.getElementById('export-docx-btn');
     const exportEpubBtn = document.getElementById('export-epub-btn');
+    const overallWordCountEl = document.getElementById('overall-word-count');
 
     function getSessionSnapshot() {
         return {
@@ -105,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('export-dropdown-block').style.display = 'inline-block';
         bookTitleDisplay.textContent = novelMetadata.title || glProject.split('/').pop();
         markSessionActivity();
+        renderOverallWordCount();
     }
 
     const editorReady = new Promise((resolve) => {
@@ -155,6 +160,56 @@ document.addEventListener('DOMContentLoaded', () => {
         return editor ? editor.getContent() : '';
     }
 
+    function countWordsFromHtml(html) {
+        const scratch = document.createElement('div');
+        scratch.innerHTML = html || '';
+        const text = (scratch.textContent || scratch.innerText || '').replace(/\s+/g, ' ').trim();
+        return text ? text.split(' ').length : 0;
+    }
+
+    function formatWordCount(count) {
+        return new Intl.NumberFormat().format(count);
+    }
+
+    function updateChapterWordCountDisplay(count) {
+        chapterWordCountEl.textContent = `Chapter: ${formatWordCount(count)} words`;
+    }
+
+    function updateOverallWordCountDisplay(count) {
+        overallWordCountEl.textContent = `Total: ${formatWordCount(count)} words`;
+    }
+
+    function renderCurrentChapterWordCount() {
+        updateChapterWordCountDisplay(countWordsFromHtml(getEditorContent()));
+    }
+
+    function renderOverallWordCount() {
+        const total = Array.from(chapterWordCounts.values()).reduce((sum, value) => sum + value, 0);
+        updateOverallWordCountDisplay(total);
+    }
+
+    async function refreshOverallWordCount() {
+        overallWordCountEl.textContent = 'Total: Calculating...';
+
+        const files = (novelMetadata.chapter_order || []).filter(filename =>
+            !filename.startsWith('DIVIDER:') && chapters.has(filename)
+        );
+
+        const counts = await Promise.all(files.map(async (filename) => {
+            const chapterData = chapters.get(filename);
+            if (!chapterData || chapterData.isNew) {
+                return [filename, 0];
+            }
+
+            const content = await fetchChapterContent(filename);
+            return [filename, countWordsFromHtml(content)];
+        }));
+
+        chapterWordCounts = new Map(counts);
+        currentPersistedWordCount = chapterWordCounts.get(currentFilename) || 0;
+        renderOverallWordCount();
+    }
+
     function updateEditorFont(fontFamily) {
         document.documentElement.style.setProperty('--editor-font', fontFamily);
         if (editor && editor.getBody()) {
@@ -193,6 +248,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && document.body.classList.contains('focus-mode')) {
             setFocusMode(false);
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
+        if (!isSaveShortcut) return;
+
+        event.preventDefault();
+
+        if (currentFilename && !manualSaveBtn.disabled) {
+            manualSaveBtn.click();
         }
     });
 
@@ -471,8 +537,10 @@ document.addEventListener('DOMContentLoaded', () => {
         chapters.clear();
         chapterCache.clear();
         chapterFetches.clear();
+        chapterWordCounts.clear();
         chapterListEl.innerHTML = '';
         currentFilename = null;
+        currentPersistedWordCount = 0;
         hasMetadataFile = false;
         hasCoverFile = false;
         
@@ -537,6 +605,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if(firstChapter) {
                 await switchChapter(firstChapter);
             }
+
+            refreshOverallWordCount();
+        } else {
+            updateChapterWordCountDisplay(0);
+            updateOverallWordCountDisplay(0);
         }
     }
 
@@ -586,6 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function persistChapterContent(filename, content) {
         chapterCache.set(filename, content);
+        chapterWordCounts.set(filename, countWordsFromHtml(content));
 
         try {
             localStorage.setItem(getChapterCacheKey(filename), content);
@@ -596,6 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function removePersistedChapterContent(filename) {
         chapterCache.delete(filename);
+        chapterWordCounts.delete(filename);
 
         try {
             localStorage.removeItem(getChapterCacheKey(filename));
@@ -721,6 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             currentFilename = filename;
+            currentPersistedWordCount = countWordsFromHtml(content || '');
             chapterTitleInput.value = filename.replace('.html', '');
             
             editorMain.style.opacity = '1';
@@ -731,6 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setEditorContent(content || '');
             unsavedChanges = false;
             setSaveStatus('', false);
+            updateChapterWordCountDisplay(currentPersistedWordCount);
 
             setTimeout(() => {
                 prefetchChapters(filename);
@@ -752,6 +829,12 @@ document.addEventListener('DOMContentLoaded', () => {
         unsavedChanges = true;
         manualSaveBtn.disabled = false;
         setSaveStatus('Unsaved Changes', true);
+        renderCurrentChapterWordCount();
+
+        if (currentFilename) {
+            chapterWordCounts.set(currentFilename, countWordsFromHtml(getEditorContent()));
+            renderOverallWordCount();
+        }
     }
 
     chapterTitleInput.addEventListener('input', onContentChange);
@@ -818,8 +901,11 @@ document.addEventListener('DOMContentLoaded', () => {
             currentFilename = newFilename;
             chapters.set(newFilename, { isNew: false });
             persistChapterContent(newFilename, htmlContent);
+            currentPersistedWordCount = countWordsFromHtml(htmlContent);
             unsavedChanges = false;
             setSaveStatus('Committed!', true);
+            updateChapterWordCountDisplay(currentPersistedWordCount);
+            renderOverallWordCount();
             setTimeout(() => setSaveStatus('', false), 3000);
             
         } catch (err) {
@@ -1086,6 +1172,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const savedTheme = localStorage.getItem('theme') || 'dark-theme';
     document.body.className = savedTheme;
+    updateChapterWordCountDisplay(0);
+    updateOverallWordCountDisplay(0);
     document.getElementById('theme-toggle').addEventListener('click', () => {
         const isDark = document.body.classList.contains('dark-theme');
         document.body.className = isDark ? 'light-theme' : 'dark-theme';
