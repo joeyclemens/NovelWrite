@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Novel Writer - GitLab</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700&family=Lora:ital,wght@0,400;0,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="static/css/style.css?v=5">
+    <style>
+        .initial-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-main);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+            transition: opacity 0.5s ease;
+        }
+        .initial-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .initial-overlay h2 {
+            font-family: var(--ui-font);
+            color: var(--text-primary);
+            margin-bottom: 0;
+        }
+        .initial-overlay p {
+            color: var(--text-secondary); max-width: 400px; text-align: center; font-size: 0.9rem;
+            margin-top: 0;
+        }
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            max-width: 380px;
+            background: var(--bg-surface);
+            padding: 24px;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-subtle);
+        }
+        .login-form input, .login-form select {
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-main);
+            color: var(--text-primary);
+            font-family: var(--ui-font);
+            font-size: 0.9rem;
+            width: 100%;
+        }
+        .login-form button {
+            padding: 12px;
+            font-size: 1rem;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            font-family: var(--ui-font);
+            font-weight: 500;
+            margin-top: 8px;
+        }
+        .login-form button:hover:not(:disabled) {
+            background: var(--accent-hover);
+        }
+        .login-form button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-cancel {
+            background: transparent !important;
+            border: 1px solid var(--border-subtle) !important;
+            color: var(--text-primary) !important;
+        }
+        .btn-cancel:hover {
+            background: var(--bg-surface-hover) !important;
+        }
+        #project-selection {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 8px;
+            border-top: 1px solid var(--border-subtle);
+            padding-top: 16px;
+        }
+        .btn-save {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.85rem;
+            font-family: var(--ui-font);
+            transition: background-color 0.2s;
+            margin-left: 12px;
+        }
+        .btn-save:hover:not(:disabled) {
+            background-color: var(--accent-hover);
+        }
+        .btn-save:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .font-selector {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
+            background: transparent;
+            color: var(--text-primary);
+            font-family: var(--ui-font);
+            font-size: 0.85rem;
+            cursor: pointer;
+            margin-left: 12px; /* For toolbar */
+        }
+        /* Metadata Modal container settings handled by .hidden */
+    </style>
+</head>
+<body class="dark-theme">
+    
+    <!-- Welcome/GitLab Connection Screen -->
+    <div id="welcome-screen" class="initial-overlay">
+        <h2>Novel Writer Cloud</h2>
+        <p>Connect your GitLab repository to sync chapters directly.</p>
+        <div class="login-form">
+            <input type="password" id="gl-token" placeholder="Personal Access Token" autocomplete="off">
+            <button id="auth-gitlab-btn">Authenticate</button>
+            <div id="auth-error-msg" style="color: #E53E3E; font-size: 0.8rem; text-align: center;"></div>
+            
+            <div id="project-selection">
+                <p style="color: var(--text-secondary); margin: 0; font-size: 0.85rem;">Select your Novel Repository:</p>
+                <select id="gl-project-select"></select>
+                <input type="text" id="gl-branch" placeholder="Branch (e.g. main)" value="main" autocomplete="off">
+                <button id="load-novel-btn">Load Novel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metadata (Title Page) Form Modal -->
+    <div id="metadata-modal" class="initial-overlay hidden">
+        <h2>Title Page Details</h2>
+        <p>This information will be used to generate your PDF/ePub Title Page.</p>
+        <div class="login-form">
+            <input type="text" id="meta-title" placeholder="Book Title" autocomplete="off">
+            <input type="text" id="meta-author" placeholder="Author Name" autocomplete="off">
+            <input type="text" id="meta-subtitle" placeholder="Subtitle (Optional)" autocomplete="off">
+            <input type="text" id="meta-copyright" placeholder="Copyright Year" autocomplete="off">
+            <label style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 8px;">Cover Image (Used for EPUB)</label>
+            <input type="file" id="meta-cover" accept="image/png, image/jpeg" style="padding: 8px;">
+            <div style="display: flex; gap: 8px;">
+                <button id="cancel-metadata-btn" class="btn-cancel" style="flex: 1;">Cancel</button>
+                <button id="save-metadata-btn" style="flex: 1;">Save & Sync</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        
+        <!-- Sidebar: Chapter List -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 id="book-title-display">Novel Workspace</h1>
+            </div>
+            
+            <div class="chapter-list-container">
+                <ul id="chapter-list">
+                    <!-- Chapters populated by JS -->
+                </ul>
+                
+                <div style="display: flex; gap: 8px;" id="sidebar-action-buttons">
+                    <button id="add-chapter-btn" class="btn-primary" style="display: none; flex: 2;" title="New Chapter">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                    </button>
+                    <button id="add-part-btn" class="btn-primary" style="display: none; flex: 1;" title="New Part Divider">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M4 6h16M4 18h16"/></svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="settings-menu" style="display: flex; gap: 4px; justify-content: flex-start; align-items: center;">
+                    <button id="theme-toggle" class="btn-icon" title="Toggle Theme">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                    </button>
+                    <button id="focus-mode-btn" class="btn-icon" title="Toggle Focus Mode">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
+                    </button>
+                    <!-- Export Options (Moved to Sidebar Footer) -->
+                    <div class="export-dropdown" id="export-dropdown-block" style="display: none;">
+                        <button class="btn-icon" title="Export Manuscript">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        </button>
+                        <div class="dropdown-content">
+                            <a href="#" id="export-pdf-btn">Export as PDF</a>
+                            <a href="#" id="export-docx-btn">Export as DOCX</a>
+                            <a href="#" id="export-epub-btn">Export as EPUB</a>
+                        </div>
+                    </div>
+                    <!-- Switch Novel -->
+                    <button id="switch-novel-btn" class="btn-icon" title="Switch Novel" style="display: none;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    </button>
+                    <!-- Metadata Edit Button -->
+                    <button id="edit-metadata-btn" class="btn-icon" title="Edit Title Page Settings" style="display: none;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area: Editor -->
+        <main class="editor-area" style="opacity: 0.3; pointer-events: none;" id="editor-main">
+            <button id="focus-mode-exit" class="btn-icon focus-mode-exit" title="Exit Focus Mode">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
+            </button>
+            
+            <header class="editor-header">
+                <div id="editor-toolbar-row" class="header-actions">
+                    <div id="editor-toolbar"></div>
+                    <div class="editor-meta-actions">
+                        <select id="editor-font-select" class="font-selector">
+                            <option value="'Merriweather', serif">Merriweather (Serif)</option>
+                            <option value="'Lora', serif">Lora (Serif)</option>
+                            <option value="'Inter', sans-serif">Inter (Sans-serif)</option>
+                            <option value="'Roboto', sans-serif">Roboto (Sans-serif)</option>
+                        </select>
+
+                        <div class="save-status" id="save-status"></div>
+                        <button id="manual-save-btn" class="btn-save" disabled>Commit to GitLab</button>
+                    </div>
+                </div>
+
+                <input type="text" id="chapter-title-input" class="chapter-title-input" placeholder="Chapter Title" autocomplete="off" disabled>
+            </header>
+            
+            <div class="editor-container-wrapper">
+                <div id="editor-container" spellcheck="false"></div>
+            </div>
+            
+        </main>
+        
+    </div>
+
+    <!-- Scripts -->
+    <!-- Export Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Drag & Drop -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
+    <!-- Custom Logic -->
+    <script src="static/js/main.js?v=11"></script>
+</body>
+</html>
