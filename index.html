@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700&family=Lora:ital,wght@0,400;0,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="static/css/style.css?v=5">
+    <link rel="stylesheet" href="static/css/style.css?v=6">
     <style>
         .initial-overlay {
             position: fixed;
@@ -178,6 +178,7 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h1 id="book-title-display">Novel Workspace</h1>
+                <div id="overall-word-count" class="sidebar-stat">Total: -- words</div>
             </div>
             
             <div class="chapter-list-container">
@@ -243,6 +244,7 @@
                             <option value="'Roboto', sans-serif">Roboto (Sans-serif)</option>
                         </select>
 
+                        <div class="word-count-pill" id="chapter-word-count">Chapter: 0 words</div>
                         <div class="save-status" id="save-status"></div>
                         <button id="manual-save-btn" class="btn-save" disabled>Commit to GitLab</button>
                     </div>
@@ -268,6 +270,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
     <!-- Custom Logic -->
-    <script src="static/js/main.js?v=11"></script>
+    <script src="static/js/main.js?v=13"></script>
 </body>
 </html>
