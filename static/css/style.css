@@ -96,6 +96,15 @@ body.focus-mode {
     text-overflow: ellipsis;
 }
 
+.sidebar-stat {
+    margin-top: 8px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
 .chapter-list-container {
     flex: 1;
     overflow-y: auto;
@@ -318,6 +327,18 @@ body.focus-mode {
 
 .save-status.visible {
     opacity: 1;
+}
+
+.word-count-pill {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    background: var(--bg-surface);
+    padding: 4px 12px;
+    border-radius: 20px;
+    white-space: nowrap;
 }
 
 .header-actions {
