@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addPartBtn = document.getElementById('add-part-btn');
     const manualSaveBtn = document.getElementById('manual-save-btn');
     const switchNovelBtn = document.getElementById('switch-novel-btn');
+    const logoutBtn = document.getElementById('logout-btn');
     const editMetadataBtn = document.getElementById('edit-metadata-btn');
     const editorMain = document.getElementById('editor-main');
     const focusModeToggleBtn = document.getElementById('focus-mode-toggle');
@@ -129,11 +130,46 @@ document.addEventListener('DOMContentLoaded', () => {
         projectSelectionBox.style.display = 'none';
     }
 
+    function deactivateEditorShell() {
+        welcomeScreen.classList.remove('hidden');
+        addChapterBtn.style.display = 'none';
+        addPartBtn.style.display = 'none';
+        switchNovelBtn.style.display = 'none';
+        logoutBtn.style.display = 'none';
+        editMetadataBtn.style.display = 'none';
+        document.getElementById('export-dropdown-block').style.display = 'none';
+        bookTitleDisplay.textContent = 'Novel Workspace';
+        metadataModal.classList.add('hidden');
+        chapterListEl.innerHTML = '';
+        chapters.clear();
+        chapterCache.clear();
+        chapterFetches.clear();
+        chapterWordCounts.clear();
+        novelMetadata = { title: '', author: '', subtitle: '', copyright: '', chapter_order: [] };
+        hasMetadataFile = false;
+        hasCoverFile = false;
+        pendingCoverBase64 = null;
+        currentFilename = null;
+        currentPersistedWordCount = 0;
+        unsavedChanges = false;
+        chapterTitleInput.value = '';
+        chapterTitleInput.disabled = true;
+        manualSaveBtn.disabled = true;
+        setEditorMode(false);
+        setEditorContent('');
+        setSaveStatus('', false);
+        editorMain.style.opacity = '0.3';
+        editorMain.style.pointerEvents = 'none';
+        updateChapterWordCountDisplay(0);
+        updateOverallWordCountDisplay(0);
+    }
+
     function activateEditorShell() {
         welcomeScreen.classList.add('hidden');
         addChapterBtn.style.display = 'flex';
         addPartBtn.style.display = 'flex';
         switchNovelBtn.style.display = 'block';
+        logoutBtn.style.display = 'block';
         editMetadataBtn.style.display = 'block';
         document.getElementById('export-dropdown-block').style.display = 'inline-block';
         bookTitleDisplay.textContent = novelMetadata.title || glProject.split('/').pop();
@@ -627,13 +663,57 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    switchNovelBtn.addEventListener('click', () => {
+    switchNovelBtn.addEventListener('click', async () => {
+        if (unsavedChanges) {
+            const confirmSwitch = confirm("You have unsaved changes. Switch novels anyway?");
+            if (!confirmSwitch) return;
+        }
+
         setSidebarOpen(false);
+        glProject = '';
+        glBranch = 'main';
+        localStorage.removeItem('glProject');
+        localStorage.removeItem('glBranch');
+        localStorage.removeItem('glLastActiveAt');
+        inputBranch.value = 'main';
+        deactivateEditorShell();
+        resetToWelcomeScreen();
+
+        try {
+            await populateProjectSelection();
+        } catch (err) {
+            console.error(err);
+            authErrorMsg.textContent = 'Could not reload your projects. Please sign in again.';
+            clearSession();
+            glToken = '';
+            glRefreshToken = '';
+            glTokenExpiresAt = 0;
+            glAuthMode = 'pat';
+            inputToken.value = '';
+            resetToWelcomeScreen();
+        }
+    });
+
+    logoutBtn.addEventListener('click', () => {
+        if (unsavedChanges) {
+            const confirmLogout = confirm("You have unsaved changes. Log out anyway?");
+            if (!confirmLogout) return;
+        }
+
+        setSidebarOpen(false);
+        deactivateEditorShell();
         clearSession();
+        glProject = '';
         glToken = '';
         glRefreshToken = '';
         glTokenExpiresAt = 0;
         glAuthMode = 'pat';
+        glBranch = 'main';
+        inputToken.value = '';
+        inputToken.disabled = false;
+        inputToken.placeholder = 'Personal Access Token';
+        inputBranch.value = 'main';
+        authErrorMsg.textContent = '';
         resetToWelcomeScreen();
     });
 
