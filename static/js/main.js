@@ -76,6 +76,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportDocxBtn = document.getElementById('export-docx-btn');
     const exportEpubBtn = document.getElementById('export-epub-btn');
     const overallWordCountEl = document.getElementById('overall-word-count');
+    const exportProgressOverlay = document.getElementById('export-progress-overlay');
+    const exportProgressDetailEl = document.getElementById('export-progress-detail');
+    const exportProgressFillEl = document.getElementById('export-progress-fill');
+    const exportProgressPercentEl = document.getElementById('export-progress-percent');
 
     function getSessionSnapshot() {
         return {
@@ -1146,6 +1150,20 @@ document.addEventListener('DOMContentLoaded', () => {
         else saveStatusEl.classList.remove('visible');
     }
 
+    function showExportProgress(detailText, percent = 0) {
+        exportProgressDetailEl.textContent = detailText;
+        exportProgressFillEl.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+        exportProgressPercentEl.textContent = `${Math.round(Math.max(0, Math.min(100, percent)))}%`;
+        exportProgressOverlay.classList.remove('hidden');
+    }
+
+    function hideExportProgress() {
+        exportProgressOverlay.classList.add('hidden');
+        exportProgressDetailEl.textContent = 'Preparing your manuscript...';
+        exportProgressFillEl.style.width = '0%';
+        exportProgressPercentEl.textContent = '0%';
+    }
+
     function onContentChange() {
         unsavedChanges = true;
         manualSaveBtn.disabled = false;
@@ -1316,6 +1334,52 @@ document.addEventListener('DOMContentLoaded', () => {
         return htmlBlock;
     }
 
+    function htmlToPdfParagraphs(html) {
+        const container = document.createElement('div');
+        container.innerHTML = html || '';
+        const blocks = [];
+        const blockSelector = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, div';
+
+        container.querySelectorAll(blockSelector).forEach((node) => {
+            if (node.children.length > 0 && node.tagName.toLowerCase() === 'div') return;
+
+            const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!text) return;
+
+            const tag = node.tagName.toLowerCase();
+            if (tag === 'li') {
+                blocks.push(`• ${text}`);
+            } else {
+                blocks.push(text);
+            }
+        });
+
+        if (blocks.length === 0) {
+            const fallback = (container.textContent || '').replace(/\s+/g, ' ').trim();
+            if (fallback) blocks.push(fallback);
+        }
+
+        return blocks;
+    }
+
+    function addPdfWrappedText(doc, text, x, y, maxWidth, lineHeight) {
+        const lines = doc.splitTextToSize(text, maxWidth);
+        doc.text(lines, x, y);
+        return y + (lines.length * lineHeight);
+    }
+
+    function getJsPdfConstructor() {
+        if (window.jspdf && window.jspdf.jsPDF) {
+            return window.jspdf.jsPDF;
+        }
+
+        if (window.jsPDF) {
+            return window.jsPDF;
+        }
+
+        throw new Error('PDF export library is not available on this page.');
+    }
+
     function escapeXml(value) {
         return String(value ?? '')
             .replace(/&/g, '&amp;')
@@ -1373,25 +1437,91 @@ ${extraHeadMarkup}
             const compiled = await compileManuscript();
             if(!compiled) return;
             
+            showExportProgress('Rendering PDF pages...', 20);
             setSaveStatus('Generating PDF...', true);
-            const htmlStr = generateHTMLString(compiled);
-            
-            const opt = {
-                margin:       1,
-                filename:     `${novelMetadata.title || 'Novel'}.pdf`,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2 },
-                jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-            };
-            
-            const element = document.createElement('div');
-            element.innerHTML = htmlStr;
-            
-            html2pdf().set(opt).from(element).save().then(() => {
-                setSaveStatus('', false);
+            const jsPDF = getJsPdfConstructor();
+            const doc = new jsPDF({ unit: 'in', format: 'letter', orientation: 'portrait' });
+            const pageWidth = 8.5;
+            const pageHeight = 11;
+            const marginX = 1;
+            const marginTop = 1;
+            const marginBottom = 1;
+            const maxWidth = pageWidth - (marginX * 2);
+            const bodyFont = fontSelect.value.includes('sans') ? 'helvetica' : 'times';
+            const title = novelMetadata.title || 'Untitled';
+            const author = novelMetadata.author || '';
+            let y = 2.5;
+
+            doc.setFont(bodyFont, 'bold');
+            doc.setFontSize(24);
+            y = addPdfWrappedText(doc, title, marginX, y, maxWidth, 0.32);
+
+            if (novelMetadata.subtitle) {
+                doc.setFont(bodyFont, 'normal');
+                doc.setFontSize(16);
+                y += 0.15;
+                y = addPdfWrappedText(doc, novelMetadata.subtitle, marginX, y, maxWidth, 0.24);
+            }
+
+            if (author) {
+                doc.setFont(bodyFont, 'normal');
+                doc.setFontSize(14);
+                y += 0.25;
+                y = addPdfWrappedText(doc, `By ${author}`, marginX, y, maxWidth, 0.22);
+            }
+
+            if (novelMetadata.copyright) {
+                doc.setFont(bodyFont, 'normal');
+                doc.setFontSize(10);
+                y += 0.35;
+                y = addPdfWrappedText(doc, `© ${novelMetadata.copyright}`, marginX, y, maxWidth, 0.18);
+            }
+
+            compiled.forEach((chapter, index) => {
+                doc.addPage();
+                showExportProgress(`Rendering PDF section ${index + 1} of ${compiled.length}...`, 20 + (((index + 1) / Math.max(compiled.length, 1)) * 70));
+                y = marginTop + 0.35;
+
+                if (chapter.isDivider) {
+                    doc.setFont(bodyFont, 'bold');
+                    doc.setFontSize(24);
+                    addPdfWrappedText(doc, chapter.title, marginX, pageHeight / 2, maxWidth, 0.32);
+                    return;
+                }
+
+                doc.setFont(bodyFont, 'bold');
+                doc.setFontSize(18);
+                y = addPdfWrappedText(doc, chapter.title, marginX, y, maxWidth, 0.26);
+                y += 0.2;
+
+                doc.setFont(bodyFont, 'normal');
+                doc.setFontSize(12);
+
+                const paragraphs = htmlToPdfParagraphs(chapter.content);
+                paragraphs.forEach((paragraph) => {
+                    const lines = doc.splitTextToSize(paragraph, maxWidth);
+                    const paragraphHeight = lines.length * 0.22;
+
+                    if (y + paragraphHeight > pageHeight - marginBottom) {
+                        doc.addPage();
+                        y = marginTop;
+                        doc.setFont(bodyFont, 'normal');
+                        doc.setFontSize(12);
+                    }
+
+                    doc.text(lines, marginX, y);
+                    y += paragraphHeight + 0.08;
+                });
             });
+
+            doc.save(`${title}.pdf`);
+            showExportProgress('Saving PDF...', 100);
+            setSaveStatus('', false);
+            setTimeout(() => hideExportProgress(), 300);
         } catch (err) {
             console.error(err);
+            setSaveStatus('', false);
+            hideExportProgress();
             alert("Export Error: " + err.message);
         }
     });
@@ -1421,9 +1551,14 @@ ${extraHeadMarkup}
     exportEpubBtn.addEventListener('click', async (e) => {
         try {
             e.preventDefault();
+            showExportProgress('Collecting chapters from GitLab...', 8);
             const compiledChapters = await compileManuscript();
-            if(!compiledChapters) return;
+            if(!compiledChapters) {
+                hideExportProgress();
+                return;
+            }
             
+            showExportProgress('Building EPUB package...', 18);
             setSaveStatus('Fetching Cover & Compiling EPUB...', true);
             
             const zip = new JSZip();
@@ -1454,6 +1589,7 @@ ${extraHeadMarkup}
             let coverPageHref = '';
 
             if (hasCoverFile) {
+                showExportProgress('Adding cover image...', 28);
                 const coverRes = await reqGL(`/repository/files/_cover.jpg/raw?ref=${glBranch}`, true);
                 const coverBlob = await coverRes.blob();
                 const coverFormat = await detectImageFormat(coverBlob);
@@ -1471,6 +1607,7 @@ ${extraHeadMarkup}
                 guideItems = `<reference type="cover" title="Cover" href="${coverPageHref}"/>\n${guideItems}`;
             }
             
+            showExportProgress('Creating title page...', 38);
             oebps.file("title.xhtml", buildEpubXhtml(
                 title,
                 `<div style="text-align:center;margin-top:30%;">
@@ -1484,6 +1621,8 @@ ${extraHeadMarkup}
             playOrder++;
 
             compiledChapters.forEach((ch, idx) => {
+                const chapterProgress = 40 + (((idx + 1) / Math.max(compiledChapters.length, 1)) * 40);
+                showExportProgress(`Formatting chapter ${idx + 1} of ${compiledChapters.length}...`, chapterProgress);
                 const fileId = `chapter_${idx}`;
                 const fileName = `${fileId}.xhtml`;
                 const safeChapterTitle = escapeXml(ch.title);
@@ -1510,6 +1649,7 @@ ${extraHeadMarkup}
                 playOrder++;
             });
 
+            showExportProgress('Writing EPUB metadata...', 84);
             oebps.file("content.opf", `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookID" version="2.0">
     <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -1540,18 +1680,26 @@ ${extraHeadMarkup}
     <navMap>${ncxNavPoints}</navMap>
 </ncx>`);
 
+            showExportProgress('Compressing EPUB file...', 90);
             const content = await zip.generateAsync({
                 type: "blob",
                 mimeType: "application/epub+zip",
                 compression: "DEFLATE",
                 compressionOptions: { level: 9 }
+            }, (metadata) => {
+                const zipProgress = 90 + (metadata.percent * 0.1);
+                showExportProgress('Compressing EPUB file...', zipProgress);
             });
+
+            showExportProgress('Saving EPUB...', 100);
             saveAs(content, `${title}.epub`);
             setSaveStatus('', false);
+            setTimeout(() => hideExportProgress(), 300);
 
         } catch (err) {
             console.error(err);
             setSaveStatus('', false);
+            hideExportProgress();
             alert("Export Error: " + err.message);
         }
     });
