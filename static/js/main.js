@@ -71,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // DOM Elements - Export & Font
     const fontSelect = document.getElementById('editor-font-select');
+    const fontSizeSelect = document.getElementById('editor-font-size-select');
     const exportPdfBtn = document.getElementById('export-pdf-btn');
     const exportDocxBtn = document.getElementById('export-docx-btn');
     const exportEpubBtn = document.getElementById('export-epub-btn');
@@ -272,6 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
             init_instance_callback: (ed) => {
                 editor = ed;
                 updateEditorFont(fontSelect.value || localStorage.getItem('editor-font') || "'Merriweather', serif");
+                updateEditorFontSize(fontSizeSelect.value || localStorage.getItem('editor-font-size') || '1.15rem');
                 applyEditorTheme();
                 resolve(ed);
             }
@@ -349,6 +351,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.documentElement.style.setProperty('--editor-font', fontFamily);
         if (editor && editor.getBody()) {
             editor.getBody().style.fontFamily = fontFamily;
+        }
+    }
+
+    function updateEditorFontSize(fontSize) {
+        document.documentElement.style.setProperty('--editor-font-size', fontSize);
+        if (editor && editor.getBody()) {
+            editor.getBody().style.fontSize = fontSize;
         }
     }
 
@@ -465,12 +474,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Font Selection Logic ---
     const savedFont = localStorage.getItem('editor-font') || "'Merriweather', serif";
+    const savedFontSize = localStorage.getItem('editor-font-size') || '1.15rem';
     fontSelect.value = savedFont;
+    fontSizeSelect.value = savedFontSize;
     updateEditorFont(savedFont);
+    updateEditorFontSize(savedFontSize);
 
     fontSelect.addEventListener('change', () => {
         updateEditorFont(fontSelect.value);
         localStorage.setItem('editor-font', fontSelect.value);
+    });
+
+    fontSizeSelect.addEventListener('change', () => {
+        updateEditorFontSize(fontSizeSelect.value);
+        localStorage.setItem('editor-font-size', fontSizeSelect.value);
     });
 
     const glHeaders = () => ({
@@ -1299,6 +1316,57 @@ document.addEventListener('DOMContentLoaded', () => {
         return htmlBlock;
     }
 
+    function escapeXml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+    }
+
+    function createEpubUuid() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return `urn:uuid:${window.crypto.randomUUID()}`;
+        }
+
+        return `urn:uuid:${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+    }
+
+    async function detectImageFormat(blob) {
+        const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+
+        if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+            return { extension: 'png', mediaType: 'image/png' };
+        }
+
+        if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+            return { extension: 'jpg', mediaType: 'image/jpeg' };
+        }
+
+        return { extension: 'jpg', mediaType: 'image/jpeg' };
+    }
+
+    function buildEpubXhtml(title, bodyMarkup, extraHeadMarkup = '') {
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>${escapeXml(title)}</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+${extraHeadMarkup}
+</head>
+<body>${bodyMarkup}</body>
+</html>`;
+    }
+
+    function convertHtmlToXhtmlFragment(html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html || '', 'text/html');
+        let xmlContent = new XMLSerializer().serializeToString(doc.body);
+        return xmlContent.replace(/^<body[^>]*>/i, '').replace(/<\/body>$/i, '');
+    }
+
     exportPdfBtn.addEventListener('click', async (e) => {
         try {
             e.preventDefault();
@@ -1359,10 +1427,10 @@ document.addEventListener('DOMContentLoaded', () => {
             setSaveStatus('Fetching Cover & Compiling EPUB...', true);
             
             const zip = new JSZip();
-            zip.file("mimetype", "application/epub+zip");
+            zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
             
             const metaInf = zip.folder("META-INF");
-            metaInf.file("container.xml", `<?xml version="1.0"?>
+            metaInf.file("container.xml", `<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
     <rootfiles>
         <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
@@ -1372,79 +1440,83 @@ document.addEventListener('DOMContentLoaded', () => {
             const oebps = zip.folder("OEBPS");
             const title = novelMetadata.title || "Untitled Novel";
             const author = novelMetadata.author || "Unknown Author";
+            const bookId = createEpubUuid();
+            const safeTitle = escapeXml(title);
+            const safeAuthor = escapeXml(author);
+            const safeSubtitle = escapeXml(novelMetadata.subtitle || '');
+            const safeCopyright = escapeXml(novelMetadata.copyright || '');
             
             let manifestItems = '';
             let spineItems = '';
             let ncxNavPoints = '';
             let playOrder = 1;
+            let guideItems = '<reference type="text" title="Start" href="title.xhtml"/>\n';
+            let coverPageHref = '';
 
             if (hasCoverFile) {
                 const coverRes = await reqGL(`/repository/files/_cover.jpg/raw?ref=${glBranch}`, true);
                 const coverBlob = await coverRes.blob();
-                oebps.file("Images/cover.jpg", coverBlob);
-                manifestItems += `<item id="cover-image" href="Images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>\n`;
-                oebps.file("cover.html", `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>Cover</title></head>
-<body style="margin:0;padding:0;text-align:center;">
-<img src="Images/cover.jpg" alt="Cover" style="height:100%;max-width:100%;" />
-</body></html>`);
-                manifestItems += `<item id="cover-page" href="cover.html" media-type="application/xhtml+xml"/>\n`;
+                const coverFormat = await detectImageFormat(coverBlob);
+                const coverImageHref = `Images/cover.${coverFormat.extension}`;
+                coverPageHref = 'cover.xhtml';
+
+                oebps.file(coverImageHref, coverBlob);
+                manifestItems += `<item id="cover-image" href="${coverImageHref}" media-type="${coverFormat.mediaType}"/>\n`;
+                oebps.file(coverPageHref, buildEpubXhtml(
+                    'Cover',
+                    `<div style="margin:0;padding:0;text-align:center;"><img src="${coverImageHref}" alt="Cover" style="display:block;height:auto;max-width:100%;margin:0 auto;"/></div>`
+                ));
+                manifestItems += `<item id="cover-page" href="${coverPageHref}" media-type="application/xhtml+xml"/>\n`;
                 spineItems += `<itemref idref="cover-page"/>\n`;
+                guideItems = `<reference type="cover" title="Cover" href="${coverPageHref}"/>\n${guideItems}`;
             }
             
-            oebps.file("title.html", `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>${title}</title></head>
-<body><div style="text-align: center; margin-top: 30%;">
-<h1>${title}</h1><h2>By ${author}</h2>
-</div></body></html>`);
+            oebps.file("title.xhtml", buildEpubXhtml(
+                title,
+                `<div style="text-align:center;margin-top:30%;">
+<h1>${safeTitle}</h1>${safeSubtitle ? `<h2>${safeSubtitle}</h2>` : ''}<h2>By ${safeAuthor}</h2>${safeCopyright ? `<p>${safeCopyright}</p>` : ''}
+</div>`
+            ));
             
-            manifestItems += `<item id="title" href="title.html" media-type="application/xhtml+xml"/>\n`;
+            manifestItems += `<item id="title" href="title.xhtml" media-type="application/xhtml+xml"/>\n`;
             spineItems += `<itemref idref="title"/>\n`;
-            ncxNavPoints += `<navPoint id="navPoint-title" playOrder="${playOrder}"><navLabel><text>Title Page</text></navLabel><content src="title.html"/></navPoint>\n`;
+            ncxNavPoints += `<navPoint id="navPoint-title" playOrder="${playOrder}"><navLabel><text>Title Page</text></navLabel><content src="title.xhtml"/></navPoint>\n`;
             playOrder++;
 
             compiledChapters.forEach((ch, idx) => {
                 const fileId = `chapter_${idx}`;
-                const fileName = `${fileId}.html`;
+                const fileName = `${fileId}.xhtml`;
+                const safeChapterTitle = escapeXml(ch.title);
                 
                 if (ch.isDivider) {
-                    oebps.file(fileName, `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>${ch.title}</title></head>
-<body><div style="text-align:center; margin-top:30%;"><h1>${ch.title}</h1></div></body></html>`);
+                    oebps.file(fileName, buildEpubXhtml(
+                        ch.title,
+                        `<div style="text-align:center;margin-top:30%;"><h1>${safeChapterTitle}</h1></div>`
+                    ));
                 } else {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(ch.content, 'text/html');
-                    let xmlContent = new XMLSerializer().serializeToString(doc.body);
-                    xmlContent = xmlContent.replace(/^<body[^>]*>/i, '').replace(/<\/body>$/i, '');
-                    
-                    oebps.file(fileName, `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>${ch.title}</title>
-<style>body { font-family: ${fontSelect.value.split(',')[0].replace(/'/g, "")}, serif; }</style>
-</head>
-<body><h2 style="text-align: center; margin-bottom: 2em;">${ch.title}</h2>${xmlContent}</body></html>`);
+                    const xmlContent = convertHtmlToXhtmlFragment(ch.content);
+                    const epubFontFamily = fontSelect.value.split(',')[0].replace(/'/g, "");
+
+                    oebps.file(fileName, buildEpubXhtml(
+                        ch.title,
+                        `<h2 style="text-align:center;margin-bottom:2em;">${safeChapterTitle}</h2>${xmlContent}`,
+                        `<style>body { font-family: ${escapeXml(epubFontFamily)}, serif; }</style>`
+                    ));
                 }
 
                 manifestItems += `<item id="${fileId}" href="${fileName}" media-type="application/xhtml+xml"/>\n`;
                 spineItems += `<itemref idref="${fileId}"/>\n`;
-                ncxNavPoints += `<navPoint id="nav-${fileId}" playOrder="${playOrder}"><navLabel><text>${ch.title}</text></navLabel><content src="${fileName}"/></navPoint>\n`;
+                ncxNavPoints += `<navPoint id="nav-${fileId}" playOrder="${playOrder}"><navLabel><text>${safeChapterTitle}</text></navLabel><content src="${fileName}"/></navPoint>\n`;
                 playOrder++;
             });
 
             oebps.file("content.opf", `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookID" version="2.0">
     <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-        <dc:title>${title}</dc:title>
-        <dc:creator>${author}</dc:creator>
+        <dc:title>${safeTitle}</dc:title>
+        <dc:creator>${safeAuthor}</dc:creator>
         <dc:language>en</dc:language>
-        <dc:identifier id="BookID">urn:uuid:123456789</dc:identifier>
+        <dc:identifier id="BookID">${bookId}</dc:identifier>
         ${hasCoverFile ? '<meta name="cover" content="cover-image"/>' : ''}
     </metadata>
     <manifest>
@@ -1454,16 +1526,26 @@ document.addEventListener('DOMContentLoaded', () => {
     <spine toc="ncx">
         ${spineItems}
     </spine>
+    <guide>
+        ${guideItems}
+    </guide>
 </package>`);
 
             oebps.file("toc.ncx", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN"
+  "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
-    <head><meta name="dtb:uid" content="urn:uuid:123456789"/><meta name="dtb:depth" content="1"/><meta name="dtb:totalPageCount" content="0"/><meta name="dtb:maxPageNumber" content="0"/></head>
-    <docTitle><text>${title}</text></docTitle>
+    <head><meta name="dtb:uid" content="${bookId}"/><meta name="dtb:depth" content="1"/><meta name="dtb:totalPageCount" content="0"/><meta name="dtb:maxPageNumber" content="0"/></head>
+    <docTitle><text>${safeTitle}</text></docTitle>
     <navMap>${ncxNavPoints}</navMap>
 </ncx>`);
 
-            const content = await zip.generateAsync({ type: "blob" });
+            const content = await zip.generateAsync({
+                type: "blob",
+                mimeType: "application/epub+zip",
+                compression: "DEFLATE",
+                compressionOptions: { level: 9 }
+            });
             saveAs(content, `${title}.epub`);
             setSaveStatus('', false);
 
