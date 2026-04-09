@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700&family=Lora:ital,wght@0,400;0,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="static/css/style.css?v=6">
+    <link rel="stylesheet" href="static/css/style.css?v=10">
     <style>
         .initial-overlay {
             position: fixed;
@@ -173,6 +173,7 @@
     </div>
 
     <div class="app-container">
+        <div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop"></div>
         
         <!-- Sidebar: Chapter List -->
         <aside class="sidebar">
@@ -201,9 +202,6 @@
                     <button id="theme-toggle" class="btn-icon" title="Toggle Theme">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                     </button>
-                    <button id="focus-mode-btn" class="btn-icon" title="Toggle Focus Mode">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
-                    </button>
                     <!-- Export Options (Moved to Sidebar Footer) -->
                     <div class="export-dropdown" id="export-dropdown-block" style="display: none;">
                         <button class="btn-icon" title="Export Manuscript">
@@ -229,7 +227,10 @@
 
         <!-- Main Content Area: Editor -->
         <main class="editor-area" style="opacity: 0.3; pointer-events: none;" id="editor-main">
-            <button id="focus-mode-exit" class="btn-icon focus-mode-exit" title="Exit Focus Mode">
+            <button id="mobile-sidebar-toggle" class="btn-icon mobile-sidebar-toggle" title="Toggle Chapters">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18"/><path d="M3 6h18"/><path d="M3 18h18"/></svg>
+            </button>
+            <button id="focus-mode-toggle" class="btn-icon focus-mode-exit" title="Enable Focus Mode">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
             </button>
             
@@ -270,6 +271,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
     <!-- Custom Logic -->
-    <script src="static/js/main.js?v=13"></script>
+    <script src="static/js/main.js?v=15"></script>
 </body>
 </html>
