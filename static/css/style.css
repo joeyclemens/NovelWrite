@@ -438,6 +438,88 @@ body.focus-mode {
     flex-shrink: 0;
 }
 
+.find-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+    backdrop-filter: blur(10px);
+}
+
+.find-panel.hidden {
+    display: none;
+}
+
+.find-panel-row,
+.find-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.find-input {
+    flex: 1 1 220px;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-family: var(--ui-font);
+    font-size: 0.9rem;
+}
+
+.find-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    user-select: none;
+}
+
+.find-status {
+    margin-left: auto;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    min-height: 1.2em;
+}
+
+.find-action-btn {
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-family: var(--ui-font);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.find-action-btn:hover {
+    background: var(--bg-surface-hover);
+}
+
+.find-action-btn-secondary {
+    color: var(--text-secondary);
+}
+
+#editor-container span[data-find-match="true"] {
+    background: color-mix(in srgb, var(--accent) 26%, transparent);
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+#editor-container span.find-match-current[data-find-match="true"] {
+    background: color-mix(in srgb, var(--accent) 46%, transparent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .editor-container-wrapper {
     display: flex;
     justify-content: center;
@@ -719,6 +801,21 @@ body.focus-mode #editor-container {
 
     #editor-toolbar .tox {
         width: 100% !important;
+    }
+
+    .find-panel-row,
+    .find-panel-actions {
+        align-items: stretch;
+    }
+
+    .find-status {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .find-action-btn,
+    .find-input {
+        width: 100%;
     }
 
     .tox .tox-toolbar__primary {
