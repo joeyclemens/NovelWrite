@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700&family=Lora:ital,wght@0,400;0,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="static/css/style.css?v=10">
+    <link rel="stylesheet" href="static/css/style.css?v=11">
     <style>
         .initial-overlay {
             position: fixed;
@@ -141,6 +141,9 @@
         <h2>Novel Writer Cloud</h2>
         <p>Connect your GitLab repository to sync chapters directly.</p>
         <div class="login-form">
+            <button id="oauth-gitlab-btn">Sign In with GitLab</button>
+            <div id="oauth-hint" style="color: var(--text-secondary); font-size: 0.8rem; text-align: center;"></div>
+            <div style="color: var(--text-secondary); font-size: 0.8rem; text-align: center; margin: 2px 0;">or use a Personal Access Token</div>
             <input type="password" id="gl-token" placeholder="Personal Access Token" autocomplete="off">
             <button id="auth-gitlab-btn">Authenticate</button>
             <div id="auth-error-msg" style="color: #E53E3E; font-size: 0.8rem; text-align: center;"></div>
@@ -271,6 +274,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
     <!-- Custom Logic -->
-    <script src="static/js/main.js?v=15"></script>
+    <script src="static/js/main.js?v=17"></script>
 </body>
 </html>
