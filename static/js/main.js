@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportEpubBtn = document.getElementById('export-epub-btn');
     const overallWordCountEl = document.getElementById('overall-word-count');
     const exportProgressOverlay = document.getElementById('export-progress-overlay');
+    const exportProgressTitleEl = document.getElementById('export-progress-title');
     const exportProgressDetailEl = document.getElementById('export-progress-detail');
     const exportProgressFillEl = document.getElementById('export-progress-fill');
     const exportProgressPercentEl = document.getElementById('export-progress-percent');
@@ -1150,7 +1151,8 @@ document.addEventListener('DOMContentLoaded', () => {
         else saveStatusEl.classList.remove('visible');
     }
 
-    function showExportProgress(detailText, percent = 0) {
+    function showExportProgress(detailText, percent = 0, titleText = 'Exporting File') {
+        exportProgressTitleEl.textContent = titleText;
         exportProgressDetailEl.textContent = detailText;
         exportProgressFillEl.style.width = `${Math.max(0, Math.min(100, percent))}%`;
         exportProgressPercentEl.textContent = `${Math.round(Math.max(0, Math.min(100, percent)))}%`;
@@ -1159,6 +1161,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function hideExportProgress() {
         exportProgressOverlay.classList.add('hidden');
+        exportProgressTitleEl.textContent = 'Exporting File';
         exportProgressDetailEl.textContent = 'Preparing your manuscript...';
         exportProgressFillEl.style.width = '0%';
         exportProgressPercentEl.textContent = '0%';
@@ -1434,13 +1437,14 @@ ${extraHeadMarkup}
     exportPdfBtn.addEventListener('click', async (e) => {
         try {
             e.preventDefault();
+            showExportProgress('Collecting chapters from GitLab...', 8, 'Exporting PDF');
             const compiled = await compileManuscript();
             if(!compiled) {
                 hideExportProgress();
                 return;
             }
             
-            showExportProgress('Rendering PDF pages...', 20);
+            showExportProgress('Rendering PDF pages...', 20, 'Exporting PDF');
             setSaveStatus('Generating PDF...', true);
             const jsPDF = getJsPdfConstructor();
             const doc = new jsPDF({ unit: 'in', format: 'letter', orientation: 'portrait' });
@@ -1482,7 +1486,7 @@ ${extraHeadMarkup}
 
             compiled.forEach((chapter, index) => {
                 doc.addPage();
-                showExportProgress(`Rendering PDF section ${index + 1} of ${compiled.length}...`, 20 + (((index + 1) / Math.max(compiled.length, 1)) * 70));
+                showExportProgress(`Rendering PDF section ${index + 1} of ${compiled.length}...`, 20 + (((index + 1) / Math.max(compiled.length, 1)) * 70), 'Exporting PDF');
                 y = marginTop + 0.35;
 
                 if (chapter.isDivider) {
@@ -1518,7 +1522,7 @@ ${extraHeadMarkup}
             });
 
             doc.save(`${title}.pdf`);
-            showExportProgress('Saving PDF...', 100);
+            showExportProgress('Saving PDF...', 100, 'Exporting PDF');
             setSaveStatus('', false);
             setTimeout(() => hideExportProgress(), 300);
         } catch (err) {
@@ -1532,7 +1536,7 @@ ${extraHeadMarkup}
     exportDocxBtn.addEventListener('click', async (e) => {
         try {
             e.preventDefault();
-            showExportProgress('Collecting chapters from GitLab...', 10);
+            showExportProgress('Collecting chapters from GitLab...', 10, 'Exporting DOCX');
             const compiled = await compileManuscript();
             if(!compiled) {
                 hideExportProgress();
@@ -1540,7 +1544,7 @@ ${extraHeadMarkup}
             }
             
             setSaveStatus('Generating DOCX...', true);
-            showExportProgress('Building Word document...', 55);
+            showExportProgress('Building Word document...', 55, 'Exporting DOCX');
             const htmlStr = generateHTMLString(compiled);
             
             const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title></head><body>";
@@ -1548,7 +1552,7 @@ ${extraHeadMarkup}
             const docHtml = header + htmlStr + footer;
             
             const blob = new Blob(['\ufeff', docHtml], { type: 'application/msword' });
-            showExportProgress('Saving DOCX...', 100);
+            showExportProgress('Saving DOCX...', 100, 'Exporting DOCX');
             saveAs(blob, `${novelMetadata.title || 'Novel'}.doc`);
             setSaveStatus('', false);
             setTimeout(() => hideExportProgress(), 300);
@@ -1563,14 +1567,14 @@ ${extraHeadMarkup}
     exportEpubBtn.addEventListener('click', async (e) => {
         try {
             e.preventDefault();
-            showExportProgress('Collecting chapters from GitLab...', 8);
+            showExportProgress('Collecting chapters from GitLab...', 8, 'Exporting EPUB');
             const compiledChapters = await compileManuscript();
             if(!compiledChapters) {
                 hideExportProgress();
                 return;
             }
             
-            showExportProgress('Building EPUB package...', 18);
+            showExportProgress('Building EPUB package...', 18, 'Exporting EPUB');
             setSaveStatus('Fetching Cover & Compiling EPUB...', true);
             
             const zip = new JSZip();
@@ -1601,7 +1605,7 @@ ${extraHeadMarkup}
             let coverPageHref = '';
 
             if (hasCoverFile) {
-                showExportProgress('Adding cover image...', 28);
+                showExportProgress('Adding cover image...', 28, 'Exporting EPUB');
                 const coverRes = await reqGL(`/repository/files/_cover.jpg/raw?ref=${glBranch}`, true);
                 const coverBlob = await coverRes.blob();
                 const coverFormat = await detectImageFormat(coverBlob);
@@ -1619,7 +1623,7 @@ ${extraHeadMarkup}
                 guideItems = `<reference type="cover" title="Cover" href="${coverPageHref}"/>\n${guideItems}`;
             }
             
-            showExportProgress('Creating title page...', 38);
+            showExportProgress('Creating title page...', 38, 'Exporting EPUB');
             oebps.file("title.xhtml", buildEpubXhtml(
                 title,
                 `<div style="text-align:center;margin-top:30%;">
@@ -1634,7 +1638,7 @@ ${extraHeadMarkup}
 
             compiledChapters.forEach((ch, idx) => {
                 const chapterProgress = 40 + (((idx + 1) / Math.max(compiledChapters.length, 1)) * 40);
-                showExportProgress(`Formatting chapter ${idx + 1} of ${compiledChapters.length}...`, chapterProgress);
+                showExportProgress(`Formatting chapter ${idx + 1} of ${compiledChapters.length}...`, chapterProgress, 'Exporting EPUB');
                 const fileId = `chapter_${idx}`;
                 const fileName = `${fileId}.xhtml`;
                 const safeChapterTitle = escapeXml(ch.title);
@@ -1661,7 +1665,7 @@ ${extraHeadMarkup}
                 playOrder++;
             });
 
-            showExportProgress('Writing EPUB metadata...', 84);
+            showExportProgress('Writing EPUB metadata...', 84, 'Exporting EPUB');
             oebps.file("content.opf", `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookID" version="2.0">
     <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -1692,7 +1696,7 @@ ${extraHeadMarkup}
     <navMap>${ncxNavPoints}</navMap>
 </ncx>`);
 
-            showExportProgress('Compressing EPUB file...', 90);
+            showExportProgress('Compressing EPUB file...', 90, 'Exporting EPUB');
             const content = await zip.generateAsync({
                 type: "blob",
                 mimeType: "application/epub+zip",
@@ -1700,10 +1704,10 @@ ${extraHeadMarkup}
                 compressionOptions: { level: 9 }
             }, (metadata) => {
                 const zipProgress = 90 + (metadata.percent * 0.1);
-                showExportProgress('Compressing EPUB file...', zipProgress);
+                showExportProgress('Compressing EPUB file...', zipProgress, 'Exporting EPUB');
             });
 
-            showExportProgress('Saving EPUB...', 100);
+            showExportProgress('Saving EPUB...', 100, 'Exporting EPUB');
             saveAs(content, `${title}.epub`);
             setSaveStatus('', false);
             setTimeout(() => hideExportProgress(), 300);
