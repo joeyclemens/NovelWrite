@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700&family=Lora:ital,wght@0,400;0,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="static/css/style.css?v=11">
+    <link rel="stylesheet" href="static/css/style.css?v=13">
     <style>
         .initial-overlay {
             position: fixed;
@@ -175,6 +175,17 @@
         </div>
     </div>
 
+    <div id="export-progress-overlay" class="export-progress-overlay hidden" aria-live="polite" aria-busy="true">
+        <div class="export-progress-card">
+            <div class="export-progress-title">Exporting EPUB</div>
+            <div id="export-progress-detail" class="export-progress-detail">Preparing your manuscript...</div>
+            <div class="export-progress-bar">
+                <div id="export-progress-fill" class="export-progress-fill"></div>
+            </div>
+            <div id="export-progress-percent" class="export-progress-percent">0%</div>
+        </div>
+    </div>
+
     <div class="app-container">
         <div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop"></div>
         
@@ -250,6 +261,12 @@
                             <option value="'Inter', sans-serif">Inter (Sans-serif)</option>
                             <option value="'Roboto', sans-serif">Roboto (Sans-serif)</option>
                         </select>
+                        <select id="editor-font-size-select" class="font-selector">
+                            <option value="1rem">Small</option>
+                            <option value="1.15rem">Medium</option>
+                            <option value="1.3rem">Large</option>
+                            <option value="1.45rem">XL</option>
+                        </select>
 
                         <div class="word-count-pill" id="chapter-word-count">Chapter: 0 words</div>
                         <div class="save-status" id="save-status"></div>
@@ -270,6 +287,7 @@
 
     <!-- Scripts -->
     <!-- Export Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -277,6 +295,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
     <!-- Custom Logic -->
-    <script src="static/js/main.js?v=18"></script>
+    <script src="static/js/main.js?v=21"></script>
 </body>
 </html>
