@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700&family=Lora:ital,wght@0,400;0,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="static/css/style.css?v=13">
+    <link rel="stylesheet" href="static/css/style.css?v=14">
     <style>
         .initial-overlay {
             position: fixed;
@@ -255,6 +255,9 @@
                 <div id="editor-toolbar-row" class="header-actions">
                     <div id="editor-toolbar"></div>
                     <div class="editor-meta-actions">
+                        <button id="find-replace-btn" class="btn-icon" title="Find and Replace">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6"/><path d="M11 8v6"/></svg>
+                        </button>
                         <select id="editor-font-select" class="font-selector">
                             <option value="'Merriweather', serif">Merriweather (Serif)</option>
                             <option value="'Lora', serif">Lora (Serif)</option>
@@ -271,6 +274,27 @@
                         <div class="word-count-pill" id="chapter-word-count">Chapter: 0 words</div>
                         <div class="save-status" id="save-status"></div>
                         <button id="manual-save-btn" class="btn-save" disabled>Commit to GitLab</button>
+                    </div>
+                </div>
+
+                <div id="find-panel" class="find-panel hidden">
+                    <div class="find-panel-row">
+                        <input type="text" id="find-input" class="find-input" placeholder="Find" autocomplete="off">
+                        <input type="text" id="replace-input" class="find-input" placeholder="Replace" autocomplete="off">
+                    </div>
+                    <div class="find-panel-row">
+                        <label class="find-checkbox">
+                            <input type="checkbox" id="find-match-case">
+                            <span>Match case</span>
+                        </label>
+                        <div id="find-status" class="find-status">Enter text to search</div>
+                    </div>
+                    <div class="find-panel-actions">
+                        <button id="find-prev-btn" class="find-action-btn" type="button">Previous</button>
+                        <button id="find-next-btn" class="find-action-btn" type="button">Next</button>
+                        <button id="replace-one-btn" class="find-action-btn" type="button">Replace</button>
+                        <button id="replace-all-btn" class="find-action-btn" type="button">Replace All</button>
+                        <button id="close-find-btn" class="find-action-btn find-action-btn-secondary" type="button">Close</button>
                     </div>
                 </div>
 
@@ -295,6 +319,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
     <!-- Custom Logic -->
-    <script src="static/js/main.js?v=22"></script>
+    <script src="static/js/main.js?v=23"></script>
 </body>
 </html>
