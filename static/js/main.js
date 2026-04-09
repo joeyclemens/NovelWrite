@@ -7,9 +7,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let unsavedChanges = false;
     let suppressEditorChanges = false;
     let editor = null;
+    let glAuthMode = 'pat';
+    let glRefreshToken = '';
+    let glTokenExpiresAt = 0;
     let chapterWordCounts = new Map();
     let currentPersistedWordCount = 0;
     const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+    const OAUTH_STORAGE_KEYS = {
+        state: 'glOAuthState',
+        verifier: 'glOAuthCodeVerifier'
+    };
+    const GITLAB_OAUTH_CONFIG = {
+        instanceUrl: 'https://gitlab.com',
+        clientId: 'f3df7239cba7b30d24865fe6073965fa9f02362057d5b4f51c3f946f2e635240',
+        redirectUri: `${window.location.origin}${window.location.pathname}`,
+        scopes: 'api read_user openid profile'
+    };
     
     // Metadata State
     let novelMetadata = { title: '', author: '', subtitle: '', copyright: '', chapter_order: [] };
@@ -21,6 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const welcomeScreen = document.getElementById('welcome-screen');
     const inputToken = document.getElementById('gl-token');
     const authBtn = document.getElementById('auth-gitlab-btn');
+    const oauthBtn = document.getElementById('oauth-gitlab-btn');
+    const oauthHint = document.getElementById('oauth-hint');
     const authErrorMsg = document.getElementById('auth-error-msg');
     const projectSelectionBox = document.getElementById('project-selection');
     const glProjectSelect = document.getElementById('gl-project-select');
@@ -62,7 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getSessionSnapshot() {
         return {
+            authMode: localStorage.getItem('glAuthMode') || 'pat',
             token: localStorage.getItem('glToken') || '',
+            refreshToken: localStorage.getItem('glRefreshToken') || '',
+            tokenExpiresAt: Number(localStorage.getItem('glTokenExpiresAt') || '0'),
             project: localStorage.getItem('glProject') || '',
             branch: localStorage.getItem('glBranch') || 'main',
             lastActive: Number(localStorage.getItem('glLastActiveAt') || '0')
@@ -75,29 +93,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function persistSession() {
+        localStorage.setItem('glAuthMode', glAuthMode);
         localStorage.setItem('glToken', glToken);
+        localStorage.setItem('glRefreshToken', glRefreshToken || '');
+        localStorage.setItem('glTokenExpiresAt', String(glTokenExpiresAt || 0));
         localStorage.setItem('glProject', glProject);
         localStorage.setItem('glBranch', glBranch);
         markSessionActivity();
     }
 
     function clearSession() {
+        localStorage.removeItem('glAuthMode');
         localStorage.removeItem('glToken');
+        localStorage.removeItem('glRefreshToken');
+        localStorage.removeItem('glTokenExpiresAt');
         localStorage.removeItem('glProject');
         localStorage.removeItem('glBranch');
         localStorage.removeItem('glLastActiveAt');
+        localStorage.removeItem(OAUTH_STORAGE_KEYS.state);
+        localStorage.removeItem(OAUTH_STORAGE_KEYS.verifier);
     }
 
     function isSessionActive() {
-        const { token, project, lastActive } = getSessionSnapshot();
-        return !!token && !!project && (Date.now() - lastActive) < SESSION_TIMEOUT_MS;
+        const { token, lastActive } = getSessionSnapshot();
+        return !!token && (Date.now() - lastActive) < SESSION_TIMEOUT_MS;
     }
 
     function resetToWelcomeScreen() {
         welcomeScreen.classList.remove('hidden');
         authBtn.style.display = 'block';
         authBtn.textContent = 'Authenticate';
+        oauthBtn.disabled = !GITLAB_OAUTH_CONFIG.clientId;
         inputToken.disabled = false;
+        inputToken.placeholder = 'Personal Access Token';
         projectSelectionBox.style.display = 'none';
     }
 
@@ -111,6 +139,76 @@ document.addEventListener('DOMContentLoaded', () => {
         bookTitleDisplay.textContent = novelMetadata.title || glProject.split('/').pop();
         markSessionActivity();
         renderOverallWordCount();
+    }
+
+    function isOAuthConfigured() {
+        return !!GITLAB_OAUTH_CONFIG.clientId;
+    }
+
+    function getGitLabOAuthUrl(path) {
+        return `${GITLAB_OAUTH_CONFIG.instanceUrl}${path}`;
+    }
+
+    function randomString(length = 64) {
+        const bytes = new Uint8Array(length);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes, b => ('0' + (b % 36).toString(36)).slice(-1)).join('');
+    }
+
+    function toBase64Url(bytes) {
+        return btoa(String.fromCharCode(...bytes))
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/g, '');
+    }
+
+    async function sha256(input) {
+        const encoded = new TextEncoder().encode(input);
+        return new Uint8Array(await crypto.subtle.digest('SHA-256', encoded));
+    }
+
+    async function createPkceChallenge(verifier) {
+        return toBase64Url(await sha256(verifier));
+    }
+
+    async function exchangeOAuthToken(params) {
+        const response = await fetch(getGitLabOAuthUrl('/oauth/token'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(params)
+        });
+
+        if (!response.ok) {
+            let errorMessage = response.statusText;
+            try {
+                const payload = await response.json();
+                errorMessage = payload.error_description || payload.error || response.statusText;
+            } catch (e) {}
+            throw new Error(errorMessage);
+        }
+
+        return response.json();
+    }
+
+    async function ensureValidAccessToken() {
+        if (glAuthMode !== 'oauth') return;
+        if (!glToken) throw new Error('Missing GitLab access token.');
+
+        const expiresSoon = !glTokenExpiresAt || (Date.now() + 30_000) >= glTokenExpiresAt;
+        if (!expiresSoon) return;
+        if (!glRefreshToken) throw new Error('GitLab session expired. Please sign in again.');
+
+        const tokenData = await exchangeOAuthToken({
+            grant_type: 'refresh_token',
+            client_id: GITLAB_OAUTH_CONFIG.clientId,
+            refresh_token: glRefreshToken,
+            redirect_uri: GITLAB_OAUTH_CONFIG.redirectUri
+        });
+
+        glToken = tokenData.access_token;
+        glRefreshToken = tokenData.refresh_token || glRefreshToken;
+        glTokenExpiresAt = Date.now() + ((tokenData.expires_in || 7200) * 1000);
+        persistSession();
     }
 
     const editorReady = new Promise((resolve) => {
@@ -339,28 +437,19 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('editor-font', fontSelect.value);
     });
 
-    const initialSession = getSessionSnapshot();
-    if (initialSession.token) {
-        inputToken.value = initialSession.token;
-        inputBranch.value = initialSession.branch;
-        if (!isSessionActive()) {
-            clearSession();
-            authErrorMsg.textContent = 'Your session expired after 30 minutes of inactivity.';
-            inputToken.value = '';
-            inputBranch.value = 'main';
-        }
-    }
-
     const glHeaders = () => ({
-        'PRIVATE-TOKEN': glToken,
+        ...(glAuthMode === 'oauth'
+            ? { 'Authorization': `Bearer ${glToken}` }
+            : { 'PRIVATE-TOKEN': glToken }),
         'Content-Type': 'application/json'
     });
     
     const getEncProject = () => encodeURIComponent(glProject);
 
     async function reqGL(urlPath, isProjectScoped = true, options = {}) {
+        await ensureValidAccessToken();
         markSessionActivity();
-        const base = `https://gitlab.com/api/v4`;
+        const base = `${GITLAB_OAUTH_CONFIG.instanceUrl}/api/v4`;
         const url = isProjectScoped ? `${base}/projects/${getEncProject()}${urlPath}` : `${base}${urlPath}`;
         
         const res = await fetch(url, { ...options, headers: glHeaders() });
@@ -375,45 +464,147 @@ document.addEventListener('DOMContentLoaded', () => {
         return res;
     }
 
+    async function populateProjectSelection() {
+        const res = await reqGL(`/projects?membership=true&simple=true&order_by=updated_at&per_page=100`, false);
+        const projects = await res.json();
+
+        glProjectSelect.innerHTML = '';
+        projects.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.path_with_namespace;
+            opt.textContent = p.name_with_namespace;
+            glProjectSelect.appendChild(opt);
+        });
+
+        if (projects.length === 0) {
+            authErrorMsg.textContent = "No repositories found for this user.";
+            return false;
+        }
+
+        authBtn.style.display = 'none';
+        inputToken.disabled = glAuthMode === 'oauth';
+        projectSelectionBox.style.display = 'flex';
+
+        const prev = localStorage.getItem('glProject');
+        if (prev) {
+            const exists = Array.from(glProjectSelect.options).some(o => o.value === prev);
+            if (exists) glProjectSelect.value = prev;
+        }
+
+        markSessionActivity();
+        return true;
+    }
+
+    async function beginGitLabOAuth() {
+        if (!isOAuthConfigured()) {
+            authErrorMsg.textContent = 'Add your GitLab OAuth client ID to enable Sign in with GitLab.';
+            return;
+        }
+
+        const state = randomString(32);
+        const verifier = randomString(96);
+        const challenge = await createPkceChallenge(verifier);
+
+        localStorage.setItem(OAUTH_STORAGE_KEYS.state, state);
+        localStorage.setItem(OAUTH_STORAGE_KEYS.verifier, verifier);
+
+        const authUrl = new URL(getGitLabOAuthUrl('/oauth/authorize'));
+        authUrl.searchParams.set('client_id', GITLAB_OAUTH_CONFIG.clientId);
+        authUrl.searchParams.set('redirect_uri', GITLAB_OAUTH_CONFIG.redirectUri);
+        authUrl.searchParams.set('response_type', 'code');
+        authUrl.searchParams.set('scope', GITLAB_OAUTH_CONFIG.scopes);
+        authUrl.searchParams.set('state', state);
+        authUrl.searchParams.set('code_challenge', challenge);
+        authUrl.searchParams.set('code_challenge_method', 'S256');
+
+        window.location.assign(authUrl.toString());
+    }
+
+    async function handleOAuthCallback() {
+        const url = new URL(window.location.href);
+        const code = url.searchParams.get('code');
+        const state = url.searchParams.get('state');
+        const oauthError = url.searchParams.get('error');
+
+        if (oauthError) {
+            authErrorMsg.textContent = url.searchParams.get('error_description') || oauthError;
+            url.search = '';
+            window.history.replaceState({}, document.title, url.toString());
+            return false;
+        }
+
+        if (!code) return false;
+
+        const storedState = localStorage.getItem(OAUTH_STORAGE_KEYS.state);
+        const verifier = localStorage.getItem(OAUTH_STORAGE_KEYS.verifier);
+        url.search = '';
+        window.history.replaceState({}, document.title, url.toString());
+
+        if (!storedState || !verifier || storedState !== state) {
+            authErrorMsg.textContent = 'GitLab sign-in could not be verified. Please try again.';
+            localStorage.removeItem(OAUTH_STORAGE_KEYS.state);
+            localStorage.removeItem(OAUTH_STORAGE_KEYS.verifier);
+            return true;
+        }
+
+        oauthBtn.textContent = 'Signing in...';
+        authErrorMsg.textContent = '';
+
+        try {
+            const tokenData = await exchangeOAuthToken({
+                grant_type: 'authorization_code',
+                client_id: GITLAB_OAUTH_CONFIG.clientId,
+                code,
+                code_verifier: verifier,
+                redirect_uri: GITLAB_OAUTH_CONFIG.redirectUri
+            });
+
+            glAuthMode = 'oauth';
+            glToken = tokenData.access_token;
+            glRefreshToken = tokenData.refresh_token || '';
+            glTokenExpiresAt = Date.now() + ((tokenData.expires_in || 7200) * 1000);
+            persistSession();
+            await populateProjectSelection();
+        } catch (err) {
+            console.error(err);
+            authErrorMsg.textContent = err.message;
+        } finally {
+            localStorage.removeItem(OAUTH_STORAGE_KEYS.state);
+            localStorage.removeItem(OAUTH_STORAGE_KEYS.verifier);
+            oauthBtn.textContent = 'Sign In with GitLab';
+        }
+
+        return true;
+    }
+
     authBtn.addEventListener('click', async () => {
+        glAuthMode = 'pat';
+        glRefreshToken = '';
+        glTokenExpiresAt = 0;
         glToken = inputToken.value.trim();
+        inputToken.placeholder = 'Personal Access Token';
         if (!glToken) return;
 
         authBtn.textContent = 'Authenticating...';
         authErrorMsg.textContent = '';
         
         try {
-            const res = await reqGL(`/projects?membership=true&simple=true&order_by=updated_at&per_page=100`, false);
-            const projects = await res.json();
-            
-            glProjectSelect.innerHTML = '';
-            projects.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.path_with_namespace;
-                opt.textContent = p.name_with_namespace;
-                glProjectSelect.appendChild(opt);
-            });
-            
-            if (projects.length === 0) {
-                authErrorMsg.textContent = "No repositories found for this user.";
-            } else {
-                authBtn.style.display = 'none';
-                inputToken.disabled = true;
-                projectSelectionBox.style.display = 'flex';
-                
-                const prev = localStorage.getItem('glProject');
-                if (prev) {
-                    const exists = Array.from(glProjectSelect.options).some(o => o.value === prev);
-                    if (exists) glProjectSelect.value = prev;
-                }
-
-                markSessionActivity();
-            }
+            await populateProjectSelection();
         } catch (err) {
             console.error(err);
             authErrorMsg.textContent = err.message;
         } finally {
             authBtn.textContent = 'Authenticate';
+        }
+    });
+
+    oauthBtn.addEventListener('click', async () => {
+        authErrorMsg.textContent = '';
+        try {
+            await beginGitLabOAuth();
+        } catch (err) {
+            console.error(err);
+            authErrorMsg.textContent = err.message;
         }
     });
 
@@ -439,6 +630,10 @@ document.addEventListener('DOMContentLoaded', () => {
     switchNovelBtn.addEventListener('click', () => {
         setSidebarOpen(false);
         clearSession();
+        glToken = '';
+        glRefreshToken = '';
+        glTokenExpiresAt = 0;
+        glAuthMode = 'pat';
         resetToWelcomeScreen();
     });
 
@@ -1199,6 +1394,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    const initialSession = getSessionSnapshot();
+    glAuthMode = initialSession.authMode;
+    glRefreshToken = initialSession.refreshToken;
+    glTokenExpiresAt = initialSession.tokenExpiresAt;
+
+    if (initialSession.authMode === 'pat' && initialSession.token) {
+        inputToken.value = initialSession.token;
+        inputBranch.value = initialSession.branch;
+    } else if (initialSession.authMode === 'oauth') {
+        inputBranch.value = initialSession.branch;
+        inputToken.placeholder = 'Signed in with GitLab';
+        inputToken.disabled = true;
+    }
+
+    if (!isOAuthConfigured()) {
+        oauthBtn.disabled = true;
+        oauthHint.textContent = 'Add your GitLab OAuth client ID in static/js/main.js to enable one-click sign-in.';
+    } else {
+        oauthHint.textContent = 'Recommended: sign in with GitLab';
+    }
+
+    if (initialSession.token && !isSessionActive()) {
+        clearSession();
+        authErrorMsg.textContent = 'Your session expired after 30 minutes of inactivity.';
+        inputToken.value = '';
+        inputBranch.value = 'main';
+        inputToken.disabled = false;
+        glAuthMode = 'pat';
+        glRefreshToken = '';
+        glTokenExpiresAt = 0;
+    }
+
     const savedTheme = localStorage.getItem('theme') || 'dark-theme';
     document.body.className = savedTheme;
     updateChapterWordCountDisplay(0);
@@ -1225,14 +1452,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function restorePreviousSession() {
+        const callbackHandled = await handleOAuthCallback();
+        if (callbackHandled) return;
         if (!isSessionActive()) return;
 
         const session = getSessionSnapshot();
+        glAuthMode = session.authMode;
         glToken = session.token;
+        glRefreshToken = session.refreshToken;
+        glTokenExpiresAt = session.tokenExpiresAt;
         glProject = session.project;
         glBranch = session.branch;
-        inputToken.value = glToken;
         inputBranch.value = glBranch;
+
+        if (!glProject) {
+            try {
+                await populateProjectSelection();
+            } catch (err) {
+                console.error(err);
+                authErrorMsg.textContent = 'Session restore failed. Please sign in again.';
+                clearSession();
+                resetToWelcomeScreen();
+            }
+            return;
+        }
 
         loadNovelBtn.textContent = 'Restoring...';
         authErrorMsg.textContent = '';
