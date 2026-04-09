@@ -1435,7 +1435,10 @@ ${extraHeadMarkup}
         try {
             e.preventDefault();
             const compiled = await compileManuscript();
-            if(!compiled) return;
+            if(!compiled) {
+                hideExportProgress();
+                return;
+            }
             
             showExportProgress('Rendering PDF pages...', 20);
             setSaveStatus('Generating PDF...', true);
@@ -1529,10 +1532,15 @@ ${extraHeadMarkup}
     exportDocxBtn.addEventListener('click', async (e) => {
         try {
             e.preventDefault();
+            showExportProgress('Collecting chapters from GitLab...', 10);
             const compiled = await compileManuscript();
-            if(!compiled) return;
+            if(!compiled) {
+                hideExportProgress();
+                return;
+            }
             
             setSaveStatus('Generating DOCX...', true);
+            showExportProgress('Building Word document...', 55);
             const htmlStr = generateHTMLString(compiled);
             
             const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title></head><body>";
@@ -1540,10 +1548,14 @@ ${extraHeadMarkup}
             const docHtml = header + htmlStr + footer;
             
             const blob = new Blob(['\ufeff', docHtml], { type: 'application/msword' });
+            showExportProgress('Saving DOCX...', 100);
             saveAs(blob, `${novelMetadata.title || 'Novel'}.doc`);
             setSaveStatus('', false);
+            setTimeout(() => hideExportProgress(), 300);
         } catch (err) {
             console.error(err);
+            setSaveStatus('', false);
+            hideExportProgress();
             alert("Export Error: " + err.message);
         }
     });
