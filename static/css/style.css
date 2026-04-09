@@ -256,6 +256,11 @@ body.focus-mode {
     color: var(--text-primary);
 }
 
+.mobile-sidebar-toggle,
+.mobile-sidebar-backdrop {
+    display: none;
+}
+
 /* --- Editor Area --- */
 .editor-area {
     flex: 1;
@@ -378,16 +383,21 @@ body.focus-mode {
     top: 22px;
     right: 24px;
     z-index: 80;
-    opacity: 0;
-    pointer-events: none;
+    opacity: 0.45;
+    pointer-events: auto;
     border: 1px solid var(--border-subtle);
     background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
     backdrop-filter: blur(10px);
+    transition: opacity var(--transition-speed) ease, background-color var(--transition-speed) ease, transform var(--transition-speed) ease;
+}
+
+.focus-mode-exit:hover {
+    opacity: 1;
+    transform: translateY(-1px);
 }
 
 body.focus-mode .focus-mode-exit {
     opacity: 1;
-    pointer-events: auto;
 }
 
 /* TinyMCE host */
@@ -505,14 +515,7 @@ body.focus-mode .sidebar:hover {
 }
 
 body.focus-mode .editor-header {
-    opacity: 0.18;
-    filter: blur(1px);
-}
-
-body.focus-mode .editor-header:hover,
-body.focus-mode .editor-header:focus-within {
-    opacity: 0.9;
-    filter: none;
+    display: none;
 }
 
 body.focus-mode #editor-container {
@@ -537,4 +540,140 @@ body.focus-mode #editor-container {
 }
 ::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
+}
+
+@media (max-width: 900px) {
+    .app-container {
+        display: block;
+        width: 100%;
+    }
+
+    body.sidebar-open {
+        overflow: hidden;
+    }
+
+    .mobile-sidebar-toggle {
+        display: flex;
+        position: fixed;
+        top: 14px;
+        left: 14px;
+        z-index: 130;
+        border: 1px solid var(--border-subtle);
+        background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+        backdrop-filter: blur(10px);
+    }
+
+    .mobile-sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        opacity: 0;
+        pointer-events: none;
+        z-index: 119;
+        transition: opacity var(--transition-speed) ease;
+    }
+
+    body.sidebar-open .mobile-sidebar-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: min(86vw, 320px);
+        height: 100dvh;
+        transform: translateX(-100%);
+        z-index: 120;
+        box-shadow: 20px 0 40px rgba(0, 0, 0, 0.28);
+    }
+
+    body.sidebar-open .sidebar {
+        transform: translateX(0);
+    }
+
+    .editor-area {
+        min-height: 100dvh;
+    }
+
+    .editor-header {
+        top: 0;
+        max-width: none;
+        padding: 64px 16px 12px;
+        gap: 16px;
+    }
+
+    .header-actions,
+    #editor-toolbar-row {
+        align-items: stretch;
+    }
+
+    #editor-toolbar-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    #editor-toolbar {
+        width: 100%;
+    }
+
+    .editor-meta-actions {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .chapter-title-input {
+        font-size: 2rem;
+    }
+
+    .editor-container-wrapper {
+        padding: 16px 0 56px;
+    }
+
+    #editor-container {
+        max-width: none;
+        padding: 0 16px 56px;
+        font-size: 1.05rem;
+    }
+
+    .focus-mode-exit {
+        top: 14px;
+        right: 14px;
+    }
+
+    #editor-toolbar .tox .tox-editor-header {
+        border-radius: 10px;
+        padding: 6px;
+    }
+
+    #editor-toolbar .tox {
+        width: 100% !important;
+    }
+
+    .tox .tox-toolbar__primary {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
+    }
+
+    .tox .tox-toolbar__group {
+        flex-shrink: 0;
+    }
+
+    .font-selector,
+    .word-count-pill,
+    .save-status,
+    .btn-save {
+        width: auto;
+    }
+
+    body.focus-mode .mobile-sidebar-toggle {
+        opacity: 0;
+        pointer-events: none;
+    }
 }
