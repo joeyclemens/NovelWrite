@@ -81,6 +81,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportProgressDetailEl = document.getElementById('export-progress-detail');
     const exportProgressFillEl = document.getElementById('export-progress-fill');
     const exportProgressPercentEl = document.getElementById('export-progress-percent');
+    const findReplaceBtn = document.getElementById('find-replace-btn');
+    const findPanel = document.getElementById('find-panel');
+    const findInput = document.getElementById('find-input');
+    const replaceInput = document.getElementById('replace-input');
+    const findMatchCaseToggle = document.getElementById('find-match-case');
+    const findStatusEl = document.getElementById('find-status');
+    const findPrevBtn = document.getElementById('find-prev-btn');
+    const findNextBtn = document.getElementById('find-next-btn');
+    const replaceOneBtn = document.getElementById('replace-one-btn');
+    const replaceAllBtn = document.getElementById('replace-all-btn');
+    const closeFindBtn = document.getElementById('close-find-btn');
 
     function getSessionSnapshot() {
         return {
@@ -293,13 +304,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setEditorContent(content) {
         if (!editor) return;
+        resetFindReplace();
         suppressEditorChanges = true;
         editor.setContent(content || '');
         suppressEditorChanges = false;
     }
 
+    function sanitizeEditorHtml(html) {
+        const scratch = document.createElement('div');
+        scratch.innerHTML = html || '';
+
+        scratch.querySelectorAll('[data-find-match="true"]').forEach((node) => {
+            const parent = node.parentNode;
+            if (!parent) return;
+
+            while (node.firstChild) {
+                parent.insertBefore(node.firstChild, node);
+            }
+
+            parent.removeChild(node);
+        });
+
+        return scratch.innerHTML;
+    }
+
     function getEditorContent() {
-        return editor ? editor.getContent() : '';
+        return editor ? sanitizeEditorHtml(editor.getContent()) : '';
     }
 
     function countWordsFromHtml(html) {
@@ -409,6 +439,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && isFindPanelOpen()) {
+            closeFindPanel();
+            return;
+        }
+
         if (event.key === 'Escape' && document.body.classList.contains('focus-mode')) {
             setFocusMode(false);
         }
@@ -425,6 +460,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.addEventListener('keydown', (event) => {
+        const isFindShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f';
+        if (isFindShortcut && !welcomeScreen.classList.contains('hidden')) {
+            return;
+        }
+
+        if (isFindShortcut) {
+            event.preventDefault();
+            openFindPanel();
+            return;
+        }
+
         const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
         if (!isSaveShortcut) return;
 
@@ -1167,6 +1213,225 @@ document.addEventListener('DOMContentLoaded', () => {
         exportProgressPercentEl.textContent = '0%';
     }
 
+    let findMatches = [];
+    let currentFindMatchIndex = -1;
+
+    function isFindPanelOpen() {
+        return !findPanel.classList.contains('hidden');
+    }
+
+    function updateFindStatus(message) {
+        findStatusEl.textContent = message;
+    }
+
+    function unwrapFindMarker(node) {
+        const parent = node.parentNode;
+        if (!parent) return;
+
+        while (node.firstChild) {
+            parent.insertBefore(node.firstChild, node);
+        }
+
+        parent.removeChild(node);
+        parent.normalize();
+    }
+
+    function clearFindHighlights() {
+        if (!editor || !editor.getBody()) {
+            findMatches = [];
+            currentFindMatchIndex = -1;
+            return;
+        }
+
+        editor.getBody().querySelectorAll('[data-find-match="true"]').forEach(unwrapFindMarker);
+        findMatches = [];
+        currentFindMatchIndex = -1;
+    }
+
+    function focusCurrentFindMatch() {
+        if (!editor || currentFindMatchIndex < 0 || currentFindMatchIndex >= findMatches.length) return;
+
+        findMatches.forEach((matchEl, index) => {
+            matchEl.classList.toggle('find-match-current', index === currentFindMatchIndex);
+        });
+
+        const activeMatch = findMatches[currentFindMatchIndex];
+        activeMatch.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        editor.focus();
+
+        const range = document.createRange();
+        range.selectNodeContents(activeMatch);
+        editor.selection.setRng(range);
+        updateFindStatus(`${currentFindMatchIndex + 1} of ${findMatches.length}`);
+    }
+
+    function rebuildFindHighlights(preserveIndex = false) {
+        if (!editor || !editor.getBody()) return;
+
+        const query = findInput.value;
+        const matchCase = findMatchCaseToggle.checked;
+        const previousIndex = currentFindMatchIndex;
+        clearFindHighlights();
+
+        if (!query) {
+            updateFindStatus('Enter text to search');
+            return;
+        }
+
+        const body = editor.getBody();
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+            acceptNode(node) {
+                if (!node.nodeValue || !node.nodeValue.trim()) {
+                    return NodeFilter.FILTER_REJECT;
+                }
+
+                if (node.parentElement && node.parentElement.closest('[data-find-match="true"]')) {
+                    return NodeFilter.FILTER_REJECT;
+                }
+
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        });
+
+        const textNodes = [];
+        while (walker.nextNode()) {
+            textNodes.push(walker.currentNode);
+        }
+
+        const queryValue = matchCase ? query : query.toLowerCase();
+        const createdMatches = [];
+
+        textNodes.forEach((node) => {
+            const originalText = node.nodeValue;
+            const haystack = matchCase ? originalText : originalText.toLowerCase();
+            const indices = [];
+            let startIndex = 0;
+
+            while (true) {
+                const matchIndex = haystack.indexOf(queryValue, startIndex);
+                if (matchIndex === -1) break;
+                indices.push(matchIndex);
+                startIndex = matchIndex + Math.max(query.length, 1);
+            }
+
+            if (!indices.length) return;
+
+            const fragment = document.createDocumentFragment();
+            let cursor = 0;
+
+            indices.forEach((matchIndex) => {
+                if (matchIndex > cursor) {
+                    fragment.appendChild(document.createTextNode(originalText.slice(cursor, matchIndex)));
+                }
+
+                const marker = document.createElement('span');
+                marker.dataset.findMatch = 'true';
+                marker.textContent = originalText.slice(matchIndex, matchIndex + query.length);
+                fragment.appendChild(marker);
+                createdMatches.push(marker);
+                cursor = matchIndex + query.length;
+            });
+
+            if (cursor < originalText.length) {
+                fragment.appendChild(document.createTextNode(originalText.slice(cursor)));
+            }
+
+            node.parentNode.replaceChild(fragment, node);
+        });
+
+        findMatches = createdMatches;
+
+        if (!findMatches.length) {
+            updateFindStatus('No matches');
+            return;
+        }
+
+        currentFindMatchIndex = preserveIndex ? Math.min(previousIndex, findMatches.length - 1) : 0;
+        if (currentFindMatchIndex < 0) currentFindMatchIndex = 0;
+        focusCurrentFindMatch();
+    }
+
+    function openFindPanel() {
+        findPanel.classList.remove('hidden');
+        findReplaceBtn.classList.add('active');
+
+        const selectedText = editor ? editor.selection.getContent({ format: 'text' }).trim() : '';
+        if (selectedText && !selectedText.includes('\n')) {
+            findInput.value = selectedText;
+        }
+
+        rebuildFindHighlights();
+        setTimeout(() => findInput.focus(), 0);
+    }
+
+    function closeFindPanel() {
+        clearFindHighlights();
+        findPanel.classList.add('hidden');
+        findReplaceBtn.classList.remove('active');
+        updateFindStatus('Enter text to search');
+    }
+
+    function resetFindReplace() {
+        clearFindHighlights();
+        findPanel.classList.add('hidden');
+        findReplaceBtn.classList.remove('active');
+        findInput.value = '';
+        replaceInput.value = '';
+        findMatchCaseToggle.checked = false;
+        updateFindStatus('Enter text to search');
+    }
+
+    function jumpToFindMatch(direction) {
+        if (!findMatches.length) {
+            rebuildFindHighlights();
+            return;
+        }
+
+        currentFindMatchIndex = (currentFindMatchIndex + direction + findMatches.length) % findMatches.length;
+        focusCurrentFindMatch();
+    }
+
+    function replaceCurrentMatch() {
+        if (!findMatches.length) {
+            rebuildFindHighlights();
+            return;
+        }
+
+        const activeMatch = findMatches[currentFindMatchIndex];
+        if (!activeMatch || !activeMatch.parentNode) return;
+
+        activeMatch.replaceWith(document.createTextNode(replaceInput.value));
+        editor.getBody().normalize();
+        rebuildFindHighlights(true);
+    }
+
+    function replaceAllMatches() {
+        if (!findMatches.length) {
+            rebuildFindHighlights();
+        }
+
+        if (!findMatches.length) return;
+
+        const replacement = replaceInput.value;
+        const replacedCount = findMatches.length;
+        [...findMatches].forEach((matchNode) => {
+            if (matchNode.parentNode) {
+                matchNode.replaceWith(document.createTextNode(replacement));
+            }
+        });
+
+        editor.getBody().normalize();
+        clearFindHighlights();
+        updateFindStatus(`${replacedCount} replaced`);
+
+        if (findInput.value && replacement !== findInput.value) {
+            rebuildFindHighlights();
+            if (!findMatches.length) {
+                updateFindStatus(`${replacedCount} replaced`);
+            }
+        }
+    }
+
     function onContentChange() {
         unsavedChanges = true;
         manualSaveBtn.disabled = false;
@@ -1177,7 +1442,62 @@ document.addEventListener('DOMContentLoaded', () => {
             chapterWordCounts.set(currentFilename, countWordsFromHtml(getEditorContent()));
             renderOverallWordCount();
         }
+
+        if (isFindPanelOpen() && findInput.value) {
+            rebuildFindHighlights(true);
+        }
     }
+
+    findReplaceBtn.addEventListener('click', () => {
+        if (isFindPanelOpen()) {
+            closeFindPanel();
+            return;
+        }
+
+        openFindPanel();
+    });
+
+    closeFindBtn.addEventListener('click', () => {
+        closeFindPanel();
+    });
+
+    findInput.addEventListener('input', () => {
+        rebuildFindHighlights();
+    });
+
+    findInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            jumpToFindMatch(event.shiftKey ? -1 : 1);
+        }
+    });
+
+    replaceInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            replaceCurrentMatch();
+        }
+    });
+
+    findMatchCaseToggle.addEventListener('change', () => {
+        rebuildFindHighlights();
+    });
+
+    findPrevBtn.addEventListener('click', () => {
+        jumpToFindMatch(-1);
+    });
+
+    findNextBtn.addEventListener('click', () => {
+        jumpToFindMatch(1);
+    });
+
+    replaceOneBtn.addEventListener('click', () => {
+        replaceCurrentMatch();
+    });
+
+    replaceAllBtn.addEventListener('click', () => {
+        replaceAllMatches();
+    });
 
     chapterTitleInput.addEventListener('input', onContentChange);
 
