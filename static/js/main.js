@@ -39,8 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const switchNovelBtn = document.getElementById('switch-novel-btn');
     const editMetadataBtn = document.getElementById('edit-metadata-btn');
     const editorMain = document.getElementById('editor-main');
-    const focusModeBtn = document.getElementById('focus-mode-btn');
-    const focusModeExitBtn = document.getElementById('focus-mode-exit');
+    const focusModeToggleBtn = document.getElementById('focus-mode-toggle');
+    const mobileSidebarToggleBtn = document.getElementById('mobile-sidebar-toggle');
+    const mobileSidebarBackdrop = document.getElementById('mobile-sidebar-backdrop');
 
     // DOM Elements - Metadata Modal
     const metadataModal = document.getElementById('metadata-modal');
@@ -229,25 +230,49 @@ document.addEventListener('DOMContentLoaded', () => {
     function setFocusMode(enabled) {
         document.body.classList.toggle('focus-mode', enabled);
         localStorage.setItem('focus-mode', enabled ? 'true' : 'false');
-        focusModeBtn.classList.toggle('active', enabled);
-        focusModeBtn.title = enabled ? 'Disable Focus Mode' : 'Enable Focus Mode';
-        focusModeExitBtn.title = 'Exit Focus Mode';
+        focusModeToggleBtn.classList.toggle('active', enabled);
+        focusModeToggleBtn.title = enabled ? 'Disable Focus Mode' : 'Enable Focus Mode';
+    }
+
+    function isMobileViewport() {
+        return window.innerWidth <= 900;
+    }
+
+    function setSidebarOpen(enabled) {
+        document.body.classList.toggle('sidebar-open', enabled && isMobileViewport());
+        mobileSidebarToggleBtn.classList.toggle('active', enabled && isMobileViewport());
+        mobileSidebarToggleBtn.title = enabled && isMobileViewport() ? 'Close Chapters' : 'Open Chapters';
     }
 
     const savedFocusMode = localStorage.getItem('focus-mode') === 'true';
     setFocusMode(savedFocusMode);
+    setSidebarOpen(false);
 
-    focusModeBtn.addEventListener('click', () => {
+    focusModeToggleBtn.addEventListener('click', () => {
         setFocusMode(!document.body.classList.contains('focus-mode'));
     });
 
-    focusModeExitBtn.addEventListener('click', () => {
-        setFocusMode(false);
+    mobileSidebarToggleBtn.addEventListener('click', () => {
+        setSidebarOpen(!document.body.classList.contains('sidebar-open'));
+    });
+
+    mobileSidebarBackdrop.addEventListener('click', () => {
+        setSidebarOpen(false);
     });
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && document.body.classList.contains('focus-mode')) {
             setFocusMode(false);
+        }
+
+        if (event.key === 'Escape' && document.body.classList.contains('sidebar-open')) {
+            setSidebarOpen(false);
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        if (!isMobileViewport()) {
+            setSidebarOpen(false);
         }
     });
 
@@ -412,6 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     switchNovelBtn.addEventListener('click', () => {
+        setSidebarOpen(false);
         clearSession();
         resetToWelcomeScreen();
     });
@@ -624,7 +650,10 @@ document.addEventListener('DOMContentLoaded', () => {
             li.className = 'chapter-item';
             if (filename === currentFilename) li.classList.add('active');
             li.innerHTML = `<span class="chapter-name">${title}</span>`;
-            li.addEventListener('click', () => switchChapter(filename));
+            li.addEventListener('click', () => {
+                switchChapter(filename);
+                setSidebarOpen(false);
+            });
         }
         chapterListEl.appendChild(li);
     }
