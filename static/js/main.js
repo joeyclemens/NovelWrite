@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     // Metadata State
-    let novelMetadata = { title: '', author: '', subtitle: '', copyright: '', chapter_order: [] };
+    let novelMetadata = { title: '', author: '', subtitle: '', copyright: '', chapter_order: [], notes: '', chapter_notes: {} };
     let hasMetadataFile = false;
     let hasCoverFile = false;
     let pendingCoverBase64 = null;
@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const manualSaveBtn = document.getElementById('manual-save-btn');
     const switchNovelBtn = document.getElementById('switch-novel-btn');
     const logoutBtn = document.getElementById('logout-btn');
+    const notesBtn = document.getElementById('notes-btn');
     const editMetadataBtn = document.getElementById('edit-metadata-btn');
     const editorMain = document.getElementById('editor-main');
     const focusModeToggleBtn = document.getElementById('focus-mode-toggle');
@@ -68,6 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputMetaSubtitle = document.getElementById('meta-subtitle');
     const inputMetaCopyright = document.getElementById('meta-copyright');
     const metaCover = document.getElementById('meta-cover');
+    const notesModal = document.getElementById('notes-modal');
+    const cancelNotesBtn = document.getElementById('cancel-notes-btn');
+    const saveNotesBtn = document.getElementById('save-notes-btn');
+    const overallNotesInput = document.getElementById('overall-notes-input');
+    const chapterNotesInput = document.getElementById('chapter-notes-input');
+    const chapterNotesHeading = document.getElementById('chapter-notes-heading');
     
     // DOM Elements - Export & Font
     const fontSelect = document.getElementById('editor-font-select');
@@ -103,6 +110,58 @@ document.addEventListener('DOMContentLoaded', () => {
             branch: localStorage.getItem('glBranch') || 'main',
             lastActive: Number(localStorage.getItem('glLastActiveAt') || '0')
         };
+    }
+
+    function createEmptyMetadata() {
+        return { title: '', author: '', subtitle: '', copyright: '', chapter_order: [], notes: '', chapter_notes: {} };
+    }
+
+    function normalizeMetadata(data = {}) {
+        return {
+            ...createEmptyMetadata(),
+            ...data,
+            chapter_order: Array.isArray(data.chapter_order) ? data.chapter_order : [],
+            notes: typeof data.notes === 'string' ? data.notes : '',
+            chapter_notes: data.chapter_notes && typeof data.chapter_notes === 'object' && !Array.isArray(data.chapter_notes)
+                ? data.chapter_notes
+                : {}
+        };
+    }
+
+    async function saveMetadataToGitLab(commitMessage) {
+        const actionType = hasMetadataFile ? 'update' : 'create';
+        await reqGL(`/repository/commits`, true, {
+            method: 'POST',
+            body: JSON.stringify({
+                branch: glBranch,
+                commit_message: commitMessage,
+                actions: [{
+                    action: actionType,
+                    file_path: '_metadata.json',
+                    content: JSON.stringify(novelMetadata, null, 2)
+                }]
+            })
+        });
+        hasMetadataFile = true;
+    }
+
+    function getCurrentChapterNotes() {
+        if (!currentFilename) return '';
+        return novelMetadata.chapter_notes[currentFilename] || '';
+    }
+
+    function openNotesModal() {
+        overallNotesInput.value = novelMetadata.notes || '';
+        chapterNotesHeading.textContent = currentFilename
+            ? `Notes for ${currentFilename.replace('.html', '')}`
+            : 'No chapter selected';
+        chapterNotesInput.disabled = !currentFilename;
+        chapterNotesInput.value = getCurrentChapterNotes();
+        notesModal.classList.remove('hidden');
+    }
+
+    function closeNotesModal() {
+        notesModal.classList.add('hidden');
     }
 
     function markSessionActivity() {
@@ -153,16 +212,18 @@ document.addEventListener('DOMContentLoaded', () => {
         addPartBtn.style.display = 'none';
         switchNovelBtn.style.display = 'none';
         logoutBtn.style.display = 'none';
+        notesBtn.style.display = 'none';
         editMetadataBtn.style.display = 'none';
         document.getElementById('export-dropdown-block').style.display = 'none';
         bookTitleDisplay.textContent = 'Novel Workspace';
         metadataModal.classList.add('hidden');
+        notesModal.classList.add('hidden');
         chapterListEl.innerHTML = '';
         chapters.clear();
         chapterCache.clear();
         chapterFetches.clear();
         chapterWordCounts.clear();
-        novelMetadata = { title: '', author: '', subtitle: '', copyright: '', chapter_order: [] };
+        novelMetadata = createEmptyMetadata();
         hasMetadataFile = false;
         hasCoverFile = false;
         pendingCoverBase64 = null;
@@ -187,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
         addPartBtn.style.display = 'flex';
         switchNovelBtn.style.display = 'block';
         logoutBtn.style.display = 'block';
+        notesBtn.style.display = 'block';
         editMetadataBtn.style.display = 'block';
         document.getElementById('export-dropdown-block').style.display = 'inline-block';
         bookTitleDisplay.textContent = novelMetadata.title || glProject.split('/').pop();
@@ -835,6 +897,14 @@ document.addEventListener('DOMContentLoaded', () => {
         metadataModal.classList.add('hidden');
     });
 
+    notesBtn.addEventListener('click', () => {
+        openNotesModal();
+    });
+
+    cancelNotesBtn.addEventListener('click', () => {
+        closeNotesModal();
+    });
+
     metaCover.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -897,6 +967,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    saveNotesBtn.addEventListener('click', async () => {
+        saveNotesBtn.textContent = 'Saving...';
+        saveNotesBtn.disabled = true;
+
+        novelMetadata.notes = overallNotesInput.value;
+        novelMetadata.chapter_notes = novelMetadata.chapter_notes || {};
+
+        if (currentFilename) {
+            if (chapterNotesInput.value.trim()) {
+                novelMetadata.chapter_notes[currentFilename] = chapterNotesInput.value;
+            } else {
+                delete novelMetadata.chapter_notes[currentFilename];
+            }
+        }
+
+        try {
+            await saveMetadataToGitLab('Update notes via Web Editor');
+            closeNotesModal();
+        } catch (err) {
+            console.error(err);
+            alert("Error saving notes: " + err.message);
+        } finally {
+            saveNotesBtn.textContent = 'Save Notes';
+            saveNotesBtn.disabled = false;
+        }
+    });
+
     async function loadTree() {
         await editorReady;
 
@@ -924,7 +1021,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     try {
                         const mRes = await reqGL(`/repository/files/_metadata.json/raw?ref=${glBranch}`, true);
                         const mData = await mRes.json();
-                        novelMetadata = { ...novelMetadata, ...mData };
+                        novelMetadata = normalizeMetadata({ ...novelMetadata, ...mData });
                     } catch(e) { console.error("Failed parsing metadata", e); }
                 } else if (file.name === '_cover.jpg') {
                     hasCoverFile = true;
@@ -932,6 +1029,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
+        novelMetadata = normalizeMetadata(novelMetadata);
         novelMetadata.chapter_order = novelMetadata.chapter_order || [];
         const filesArray = Array.from(chapters.keys());
         
@@ -1170,6 +1268,11 @@ document.addEventListener('DOMContentLoaded', () => {
             currentFilename = filename;
             currentPersistedWordCount = countWordsFromHtml(content || '');
             chapterTitleInput.value = filename.replace('.html', '');
+            if (!notesModal.classList.contains('hidden')) {
+                chapterNotesHeading.textContent = `Notes for ${filename.replace('.html', '')}`;
+                chapterNotesInput.disabled = false;
+                chapterNotesInput.value = getCurrentChapterNotes();
+            }
             
             editorMain.style.opacity = '1';
             editorMain.style.pointerEvents = 'all';
@@ -1524,6 +1627,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const idx = novelMetadata.chapter_order.indexOf(currentFilename);
                 if (idx !== -1) novelMetadata.chapter_order[idx] = newFilename;
                 else novelMetadata.chapter_order.push(newFilename);
+                if (novelMetadata.chapter_notes && novelMetadata.chapter_notes[currentFilename]) {
+                    novelMetadata.chapter_notes[newFilename] = novelMetadata.chapter_notes[currentFilename];
+                    delete novelMetadata.chapter_notes[currentFilename];
+                }
             } else {
                 actions.push({ 
                     action: chapterData.isNew ? "create" : "update", 
