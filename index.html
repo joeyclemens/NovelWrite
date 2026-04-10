@@ -153,6 +153,27 @@
                 <select id="gl-project-select"></select>
                 <input type="text" id="gl-branch" placeholder="Branch (e.g. main)" value="main" autocomplete="off">
                 <button id="load-novel-btn">Load Novel</button>
+                <button id="open-create-story-btn" class="btn-cancel" type="button">Create New Story</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="create-story-modal" class="initial-overlay hidden">
+        <h2>Create New Story</h2>
+        <p>Create a fresh GitLab repository and open it right away.</p>
+        <div class="login-form">
+            <input type="text" id="new-story-title" placeholder="Story Title" autocomplete="off">
+            <input type="text" id="new-story-slug" placeholder="Repository Slug (optional)" autocomplete="off">
+            <input type="text" id="new-story-branch" placeholder="Default Branch" value="main" autocomplete="off">
+            <select id="new-story-visibility">
+                <option value="private">Private</option>
+                <option value="internal">Internal</option>
+                <option value="public">Public</option>
+            </select>
+            <div id="create-story-error" style="color: #E53E3E; font-size: 0.8rem; text-align: center; min-height: 1.2em;"></div>
+            <div style="display: flex; gap: 8px;">
+                <button id="cancel-create-story-btn" class="btn-cancel" type="button" style="flex: 1;">Cancel</button>
+                <button id="create-story-btn" type="button" style="flex: 1;">Create & Open</button>
             </div>
         </div>
     </div>
@@ -342,6 +363,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
     <!-- Custom Logic -->
-    <script src="static/js/main.js?v=24"></script>
+    <script src="static/js/main.js?v=25"></script>
 </body>
 </html>
