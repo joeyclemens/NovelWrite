@@ -175,6 +175,26 @@
         </div>
     </div>
 
+    <div id="notes-modal" class="initial-overlay hidden">
+        <h2>Story Notes</h2>
+        <p>Keep one set of notes for the whole novel and a separate set for the chapter you are editing.</p>
+        <div class="notes-modal-card">
+            <div class="notes-section">
+                <label for="overall-notes-input" class="notes-label">Novel Notes</label>
+                <textarea id="overall-notes-input" class="notes-textarea" placeholder="Plot threads, reminders, research, timeline notes..."></textarea>
+            </div>
+            <div class="notes-section">
+                <label for="chapter-notes-input" class="notes-label">Chapter Notes</label>
+                <div id="chapter-notes-heading" class="notes-context">No chapter selected</div>
+                <textarea id="chapter-notes-input" class="notes-textarea" placeholder="Scene beats, revisions, continuity checks..."></textarea>
+            </div>
+            <div class="notes-modal-actions">
+                <button id="cancel-notes-btn" class="btn-cancel" type="button">Close</button>
+                <button id="save-notes-btn" type="button">Save Notes</button>
+            </div>
+        </div>
+    </div>
+
     <div id="export-progress-overlay" class="export-progress-overlay hidden" aria-live="polite" aria-busy="true">
         <div class="export-progress-card">
             <div id="export-progress-title" class="export-progress-title">Exporting File</div>
@@ -233,6 +253,9 @@
                     </button>
                     <button id="logout-btn" class="btn-icon" title="Log Out" style="display: none;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    </button>
+                    <button id="notes-btn" class="btn-icon" title="Novel and Chapter Notes" style="display: none;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>
                     </button>
                     <!-- Metadata Edit Button -->
                     <button id="edit-metadata-btn" class="btn-icon" title="Edit Title Page Settings" style="display: none;">
@@ -319,6 +342,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
     <!-- Custom Logic -->
-    <script src="static/js/main.js?v=23"></script>
+    <script src="static/js/main.js?v=24"></script>
 </body>
 </html>
