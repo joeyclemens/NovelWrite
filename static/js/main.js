@@ -41,6 +41,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const glProjectSelect = document.getElementById('gl-project-select');
     const inputBranch = document.getElementById('gl-branch');
     const loadNovelBtn = document.getElementById('load-novel-btn');
+    const openCreateStoryBtn = document.getElementById('open-create-story-btn');
+    const createStoryModal = document.getElementById('create-story-modal');
+    const newStoryTitleInput = document.getElementById('new-story-title');
+    const newStorySlugInput = document.getElementById('new-story-slug');
+    const newStoryBranchInput = document.getElementById('new-story-branch');
+    const newStoryVisibilitySelect = document.getElementById('new-story-visibility');
+    const createStoryErrorEl = document.getElementById('create-story-error');
+    const cancelCreateStoryBtn = document.getElementById('cancel-create-story-btn');
+    const createStoryBtn = document.getElementById('create-story-btn');
     
     // DOM Elements - Editor UI
     const chapterListEl = document.getElementById('chapter-list');
@@ -116,6 +125,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return { title: '', author: '', subtitle: '', copyright: '', chapter_order: [], notes: '', chapter_notes: {} };
     }
 
+    function slugifyStoryName(value) {
+        return String(value || '')
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 63);
+    }
+
     function normalizeMetadata(data = {}) {
         return {
             ...createEmptyMetadata(),
@@ -164,6 +182,20 @@ document.addEventListener('DOMContentLoaded', () => {
         notesModal.classList.add('hidden');
     }
 
+    function openCreateStoryModal() {
+        createStoryErrorEl.textContent = '';
+        newStoryTitleInput.value = '';
+        newStorySlugInput.value = '';
+        newStoryBranchInput.value = inputBranch.value.trim() || 'main';
+        newStoryVisibilitySelect.value = 'private';
+        createStoryModal.classList.remove('hidden');
+        setTimeout(() => newStoryTitleInput.focus(), 0);
+    }
+
+    function closeCreateStoryModal() {
+        createStoryModal.classList.add('hidden');
+    }
+
     function markSessionActivity() {
         if (!glToken || !glProject) return;
         localStorage.setItem('glLastActiveAt', String(Date.now()));
@@ -204,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
         inputToken.disabled = false;
         inputToken.placeholder = 'Personal Access Token';
         projectSelectionBox.style.display = 'none';
+        createStoryModal.classList.add('hidden');
     }
 
     function deactivateEditorShell() {
@@ -218,6 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bookTitleDisplay.textContent = 'Novel Workspace';
         metadataModal.classList.add('hidden');
         notesModal.classList.add('hidden');
+        createStoryModal.classList.add('hidden');
         chapterListEl.innerHTML = '';
         chapters.clear();
         chapterCache.clear();
@@ -642,14 +676,24 @@ document.addEventListener('DOMContentLoaded', () => {
             glProjectSelect.appendChild(opt);
         });
 
-        if (projects.length === 0) {
-            authErrorMsg.textContent = "No repositories found for this user.";
-            return false;
-        }
-
         authBtn.style.display = 'none';
         inputToken.disabled = glAuthMode === 'oauth';
         projectSelectionBox.style.display = 'flex';
+
+        if (projects.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'No repositories yet';
+            glProjectSelect.appendChild(opt);
+            glProjectSelect.disabled = true;
+            loadNovelBtn.disabled = true;
+            authErrorMsg.textContent = 'No repositories found yet. Create a new story to get started.';
+            return false;
+        }
+
+        glProjectSelect.disabled = false;
+        loadNovelBtn.disabled = false;
+        authErrorMsg.textContent = '';
 
         const prev = localStorage.getItem('glProject');
         if (prev) {
@@ -771,6 +815,80 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error(err);
             authErrorMsg.textContent = err.message;
+        }
+    });
+
+    openCreateStoryBtn.addEventListener('click', () => {
+        openCreateStoryModal();
+    });
+
+    cancelCreateStoryBtn.addEventListener('click', () => {
+        closeCreateStoryModal();
+    });
+
+    newStoryTitleInput.addEventListener('input', () => {
+        if (!newStorySlugInput.dataset.manualEdit) {
+            newStorySlugInput.value = slugifyStoryName(newStoryTitleInput.value);
+        }
+    });
+
+    newStorySlugInput.addEventListener('input', () => {
+        newStorySlugInput.dataset.manualEdit = newStorySlugInput.value.trim() ? 'true' : '';
+    });
+
+    createStoryBtn.addEventListener('click', async () => {
+        const storyTitle = newStoryTitleInput.value.trim();
+        const requestedBranch = newStoryBranchInput.value.trim() || 'main';
+        const repositorySlug = slugifyStoryName(newStorySlugInput.value) || slugifyStoryName(storyTitle);
+
+        if (!storyTitle) {
+            createStoryErrorEl.textContent = 'Enter a story title first.';
+            return;
+        }
+
+        if (!repositorySlug) {
+            createStoryErrorEl.textContent = 'Enter a valid repository name.';
+            return;
+        }
+
+        createStoryBtn.textContent = 'Creating...';
+        createStoryBtn.disabled = true;
+        createStoryErrorEl.textContent = '';
+
+        try {
+            const createRes = await reqGL('/projects', false, {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: storyTitle,
+                    path: repositorySlug,
+                    visibility: newStoryVisibilitySelect.value,
+                    initialize_with_readme: true,
+                    default_branch: requestedBranch
+                })
+            });
+
+            const projectData = await createRes.json();
+            glProject = projectData.path_with_namespace;
+            glBranch = projectData.default_branch || requestedBranch;
+            inputBranch.value = glBranch;
+            novelMetadata = createEmptyMetadata();
+            novelMetadata.title = storyTitle;
+
+            await saveMetadataToGitLab(`Initialize ${storyTitle}`);
+            await populateProjectSelection();
+            if (glProject) {
+                glProjectSelect.value = glProject;
+            }
+            closeCreateStoryModal();
+            await loadTree();
+            persistSession();
+            activateEditorShell();
+        } catch (err) {
+            console.error(err);
+            createStoryErrorEl.textContent = err.message;
+        } finally {
+            createStoryBtn.textContent = 'Create & Open';
+            createStoryBtn.disabled = false;
         }
     });
 
